@@ -138,7 +138,6 @@ export class ClickHouseApi implements ICredentialType {
 			},
 			skipSslCertificateValidation: '={{$credentials.tlsIgnoreSsl}}',
 			returnFullResponse: true,
-			ignoreHttpStatusErrors: true,
 		},
 	};
 }

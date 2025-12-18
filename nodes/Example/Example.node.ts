@@ -1,10 +1,16 @@
 import type {
+	IDataObject,
 	IExecuteFunctions,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeConnectionTypes } from 'n8n-workflow';
+import {
+	request as clickhouseRequest,
+	type ClickHouseCredentials,
+} from '../../src/transport/clickhouseClient';
+import { buildPaginatedSql, shapeQueryOutput } from '../../src/operations/queryUtils';
 
 export class Example implements INodeType {
 	description: INodeTypeDescription = {
@@ -248,15 +254,94 @@ export class Example implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const results: INodeExecutionData[] = [];
+		const credentials = normalizeCredentials(
+			(await this.getCredentials('ClickHouseApi')) as ClickHouseCredentials,
+		);
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			const resource = this.getNodeParameter('resource', itemIndex) as string;
 			const operation = this.getNodeParameter('operation', itemIndex) as string;
-			const item = items[itemIndex];
+
+			if (resource === 'query' && operation === 'executeQuery') {
+				const sql = this.getNodeParameter('query', itemIndex) as string;
+				const limit = this.getNodeParameter('limit', itemIndex) as number;
+				const paginate = this.getNodeParameter('paginate', itemIndex) as boolean;
+				const outputMode = this.getNodeParameter('outputMode', itemIndex) as string;
+				const databaseOverride = normalizeOptionalString(
+					this.getNodeParameter('databaseOverride', itemIndex) as string,
+				);
+				const timeoutMs = this.getNodeParameter('timeoutMs', itemIndex) as number;
+				const compress = this.getNodeParameter('compress', itemIndex) as boolean;
+
+				const queryResult = await executeQuery({
+					credentials,
+					sql,
+					limit,
+					paginate,
+					databaseOverride,
+					timeoutMs,
+					compress,
+				});
+
+				if (outputMode === 'perRow') {
+					for (const row of queryResult.rows) {
+						results.push({
+							json: row,
+							pairedItem: { item: itemIndex },
+						});
+					}
+					continue;
+				}
+
+				results.push({
+					json: shapeQueryOutput({
+						rows: queryResult.rows,
+						meta: queryResult.meta,
+						statistics: queryResult.statistics,
+						summary: queryResult.summary,
+					}),
+					pairedItem: { item: itemIndex },
+				});
+				continue;
+			}
+
+			if (resource === 'command' && operation === 'executeCommand') {
+				const sql = this.getNodeParameter('command', itemIndex) as string;
+				const databaseOverride = normalizeOptionalString(
+					this.getNodeParameter('databaseOverride', itemIndex) as string,
+				);
+				const timeoutMs = this.getNodeParameter('timeoutMs', itemIndex) as number;
+				const compress = this.getNodeParameter('compress', itemIndex) as boolean;
+
+				const response = await clickhouseRequest({
+					credentials,
+					sql,
+					databaseOverride,
+					timeoutMs,
+					compress,
+					waitEndOfQuery: true,
+				});
+
+				const sanitizedHeaders = sanitizeHeaders(response.headers);
+				const queryId = response.headers['x-clickhouse-query-id'] ?? null;
+				const body = response.body.trim();
+				const summary: IDataObject = {
+					queryId,
+					headers: sanitizedHeaders,
+				};
+				if (body) {
+					summary.body = body;
+				}
+
+				results.push({
+					json: summary,
+					pairedItem: { item: itemIndex },
+				});
+				continue;
+			}
 
 			results.push({
 				json: {
-					...item.json,
 					resource,
 					operation,
 					stub: true,
@@ -267,4 +352,143 @@ export class Example implements INodeType {
 
 		return [results];
 	}
+}
+
+type QueryExecutionOptions = {
+	credentials: ClickHouseCredentials;
+	sql: string;
+	limit: number;
+	paginate: boolean;
+	databaseOverride?: string;
+	timeoutMs: number;
+	compress: boolean;
+};
+
+type QueryExecutionResult = {
+	rows: IDataObject[];
+	meta: IDataObject[];
+	statistics: IDataObject;
+	summary: IDataObject;
+};
+
+async function executeQuery(options: QueryExecutionOptions): Promise<QueryExecutionResult> {
+	const { credentials, sql, limit, paginate, databaseOverride, timeoutMs, compress } = options;
+	const safeLimit = Math.max(0, Math.floor(limit));
+	const shouldPaginate = paginate && safeLimit > 0;
+
+	const rows: IDataObject[] = [];
+	let meta: IDataObject[] = [];
+	let statistics: IDataObject = {};
+	let pageCount = 0;
+
+	while (true) {
+		const offset = shouldPaginate ? pageCount * safeLimit : 0;
+		const pagedSql = buildPaginatedSql(sql, safeLimit, offset);
+		const response = await clickhouseRequest({
+			credentials,
+			sql: pagedSql,
+			databaseOverride,
+			timeoutMs,
+			compress,
+			format: 'JSON',
+			waitEndOfQuery: true,
+		});
+
+		const parsed = parseJsonResponse(response.body, credentials);
+		const pageRows = normalizeRows(parsed.data);
+		if (pageCount === 0) {
+			meta = normalizeMeta(parsed.meta);
+		}
+		statistics = normalizeStatistics(parsed.statistics);
+		rows.push(...pageRows);
+		pageCount += 1;
+
+		if (!shouldPaginate || pageRows.length < safeLimit) {
+			break;
+		}
+	}
+
+	const summary: IDataObject = {
+		rowCount: rows.length,
+		limit: safeLimit,
+		pages: pageCount,
+		paginated: shouldPaginate,
+	};
+
+	return { rows, meta, statistics, summary };
+}
+
+function normalizeRows(data: unknown): IDataObject[] {
+	if (!Array.isArray(data)) {
+		return [];
+	}
+	return data.filter(isRecord);
+}
+
+function isRecord(value: unknown): value is IDataObject {
+	return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseJsonResponse(body: string, credentials: ClickHouseCredentials): {
+	data?: unknown;
+	meta?: unknown;
+	statistics?: unknown;
+} {
+	try {
+		const parsed = JSON.parse(body) as { data?: unknown; meta?: unknown; statistics?: unknown };
+		return parsed ?? {};
+	} catch (error) {
+		const excerpt = safeExcerpt(body, credentials);
+		const message = `Failed to parse ClickHouse JSON response. ${excerpt}`;
+		throw new Error(message, { cause: error instanceof Error ? error : undefined });
+	}
+}
+
+function normalizeMeta(meta: unknown): IDataObject[] {
+	if (!Array.isArray(meta)) {
+		return [];
+	}
+	return meta.filter(isRecord);
+}
+
+function normalizeStatistics(statistics: unknown): IDataObject {
+	return isRecord(statistics) ? statistics : {};
+}
+
+function safeExcerpt(body: string, credentials: ClickHouseCredentials, maxLength = 500): string {
+	const excerpt = body.length > maxLength ? `${body.slice(0, maxLength)}...` : body;
+	return redactSecrets(excerpt, credentials);
+}
+
+function redactSecrets(value: string, credentials: ClickHouseCredentials): string {
+	let output = value;
+	const secrets = [credentials.username, credentials.password].filter((item) => item);
+	for (const secret of secrets) {
+		output = output.split(secret).join('***');
+	}
+	return output;
+}
+
+function normalizeOptionalString(value: string): string | undefined {
+	const trimmed = value.trim();
+	return trimmed ? trimmed : undefined;
+}
+
+function sanitizeHeaders(headers: Record<string, string>): Record<string, string> {
+	const blocked = new Set(['authorization', 'proxy-authorization', 'set-cookie', 'cookie']);
+	const sanitized: Record<string, string> = {};
+	for (const [key, value] of Object.entries(headers)) {
+		if (blocked.has(key.toLowerCase())) continue;
+		sanitized[key] = value;
+	}
+	return sanitized;
+}
+
+function normalizeCredentials(credentials: ClickHouseCredentials): ClickHouseCredentials {
+	return {
+		...credentials,
+		protocol: credentials.protocol === 'http' ? 'http' : 'https',
+		port: credentials.port ?? 8123,
+		tlsIgnoreSsl: Boolean(credentials.tlsIgnoreSsl),
+	};
 }
