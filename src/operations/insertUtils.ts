@@ -61,7 +61,11 @@ function extractColumnsFromUi(value: unknown): string[] {
 		return [];
 	}
 
-	const list = Array.isArray(columns) ? columns : Array.isArray((columns as any).columns) ? (columns as any).columns : [];
+	const list = Array.isArray(columns)
+		? columns
+		: isRecord(columns) && Array.isArray(columns.columns)
+			? columns.columns
+			: [];
 	const result: string[] = [];
 	for (const entry of list) {
 		if (!entry || typeof entry !== 'object') continue;
@@ -71,4 +75,8 @@ function extractColumnsFromUi(value: unknown): string[] {
 		}
 	}
 	return result;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

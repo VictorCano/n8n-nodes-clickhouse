@@ -1,7 +1,4 @@
-import { request as httpRequest } from 'node:http';
-import { request as httpsRequest } from 'node:https';
-import type { IncomingHttpHeaders, RequestOptions } from 'node:http';
-import { createGunzip, gzipSync } from 'node:zlib';
+import type { IHttpRequestOptions, IN8nHttpFullResponse } from 'n8n-workflow';
 
 export type ClickHouseCredentials = {
 	protocol: 'http' | 'https';
@@ -30,6 +27,7 @@ export type ClickHouseRequestOptions = {
 	body?: string | Buffer;
 	requestHeaders?: Record<string, string>;
 	gzipRequest?: boolean;
+	httpRequest?: HttpRequestFn;
 };
 
 export type ClickHouseResponse = {
@@ -37,6 +35,8 @@ export type ClickHouseResponse = {
 	headers: Record<string, string>;
 	body: string;
 };
+
+type HttpRequestFn = (options: IHttpRequestOptions) => Promise<unknown>;
 
 export function buildBaseUrl(credentials: Pick<ClickHouseCredentials, 'protocol' | 'host' | 'port'>): string {
 	const protocol = credentials.protocol;
@@ -85,7 +85,7 @@ export function buildQueryString(options: {
 }
 
 export async function request(options: ClickHouseRequestOptions): Promise<ClickHouseResponse> {
-	const { credentials, sql } = options;
+	const { credentials, sql, httpRequest } = options;
 	const timeoutMs = options.timeoutMs ?? 60_000;
 	const database = options.databaseOverride ?? credentials.defaultDatabase;
 	const queryInUrl = options.queryInUrl ?? false;
@@ -98,8 +98,8 @@ export async function request(options: ClickHouseRequestOptions): Promise<ClickH
 		query: queryInUrl ? sql : undefined,
 	});
 
-	const hostname = sanitizeHost(credentials.host);
-	const path = queryString ? `/${queryString}` : '/';
+	const baseUrl = buildBaseUrl(credentials);
+	const url = `${baseUrl}/${queryString}`;
 	const headers: Record<string, string> = {
 		'Accept-Encoding': 'gzip',
 		'Content-Type': 'text/plain; charset=utf-8',
@@ -114,73 +114,149 @@ export async function request(options: ClickHouseRequestOptions): Promise<ClickH
 	headers.Authorization = `Basic ${authToken}`;
 
 	const bodyPayload = options.body ?? (queryInUrl ? '' : sql);
-	const bodyBuffer = Buffer.isBuffer(bodyPayload)
-		? bodyPayload
-		: Buffer.from(bodyPayload, 'utf8');
-	const requestBody = options.gzipRequest ? gzipSync(bodyBuffer) : bodyBuffer;
+	const requestBody = options.gzipRequest ? await gzipPayload(bodyPayload) : bodyPayload;
 	if (options.gzipRequest) {
 		headers['Content-Encoding'] = 'gzip';
 	}
-	headers['Content-Length'] = requestBody.length.toString();
 
-	const requestOptions: RequestOptions & {
-		rejectUnauthorized?: boolean;
-		ca?: string;
-		cert?: string;
-		key?: string;
-		passphrase?: string;
+	const requestOptions: IHttpRequestOptions & {
+		agentOptions?: {
+			rejectUnauthorized?: boolean;
+			ca?: string;
+			cert?: string;
+			key?: string;
+			passphrase?: string;
+		};
 	} = {
 		method: 'POST',
-		hostname,
-		port: credentials.port,
-		path,
+		url,
+		body: requestBody,
 		headers,
+		timeout: timeoutMs,
+		encoding: 'text',
+		json: false,
+		returnFullResponse: true,
+		ignoreHttpStatusErrors: true,
 	};
 
 	if (credentials.protocol === 'https') {
-		requestOptions.rejectUnauthorized = !credentials.tlsIgnoreSsl;
-		if (credentials.ca) requestOptions.ca = credentials.ca;
-		if (credentials.cert) requestOptions.cert = credentials.cert;
-		if (credentials.key) requestOptions.key = credentials.key;
-		if (credentials.passphrase) requestOptions.passphrase = credentials.passphrase;
+		requestOptions.skipSslCertificateValidation = credentials.tlsIgnoreSsl;
+		if (credentials.ca || credentials.cert || credentials.key || credentials.passphrase) {
+			requestOptions.agentOptions = {
+				rejectUnauthorized: !credentials.tlsIgnoreSsl,
+				ca: credentials.ca,
+				cert: credentials.cert,
+				key: credentials.key,
+				passphrase: credentials.passphrase,
+			};
+		}
 	}
 
-	return await new Promise<ClickHouseResponse>((resolve, reject) => {
-		const transport = credentials.protocol === 'https' ? httpsRequest : httpRequest;
-		const req = transport(requestOptions, (res) => {
-			const status = res.statusCode ?? 0;
-			const headersMap = normalizeHeaders(res.headers);
-			const encoding = (headersMap['content-encoding'] || '').toLowerCase();
-			const stream = encoding.includes('gzip') ? res.pipe(createGunzip()) : res;
-			const chunks: Buffer[] = [];
-
-			stream.on('data', (chunk: Buffer) => {
-				chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-			});
-			stream.on('error', (error) => {
-				reject(wrapError(error, credentials));
-			});
-			stream.on('end', () => {
-				const body = Buffer.concat(chunks).toString('utf8');
-				if (status >= 400 || status === 0) {
-					reject(buildResponseError(status, res.statusMessage, headersMap, body, credentials));
-					return;
-				}
-				resolve({ status, headers: headersMap, body });
-			});
+	const response = httpRequest
+		? await httpRequest(requestOptions)
+		: await fetchRequest({
+			url,
+			headers,
+			body: requestBody,
+			timeoutMs,
+			allowUnsafeTls: credentials.tlsIgnoreSsl,
 		});
 
-		req.on('error', (error) => {
-			reject(wrapError(error, credentials));
-		});
+	const normalized = normalizeResponse(response, credentials);
+	if (normalized.status >= 400 || normalized.status === 0) {
+		throw buildResponseError(
+			normalized.status,
+			undefined,
+			normalized.headers,
+			normalized.body,
+			credentials,
+		);
+	}
 
-		req.setTimeout(timeoutMs, () => {
-			req.destroy(new Error(`Request timed out after ${timeoutMs}ms`));
-		});
+	return normalized;
+}
 
-		req.write(requestBody);
-		req.end();
+async function fetchRequest(options: {
+	url: string;
+	headers: Record<string, string>;
+	body: string | Buffer;
+	timeoutMs: number;
+	allowUnsafeTls: boolean;
+}): Promise<ClickHouseResponse> {
+	if (options.allowUnsafeTls) {
+		throw new Error('TLS verification cannot be disabled without n8n httpRequest support.');
+	}
+
+	const response = await fetch(options.url, {
+		method: 'POST',
+		headers: options.headers,
+		body: options.body,
+		signal: AbortSignal.timeout(options.timeoutMs),
 	});
+
+	const body = await response.text();
+	const headers = normalizeFetchHeaders(response.headers);
+	return {
+		status: response.status,
+		headers,
+		body,
+	};
+}
+
+function normalizeResponse(response: unknown, credentials: ClickHouseCredentials): ClickHouseResponse {
+	if (!response || typeof response !== 'object') {
+		return {
+			status: 0,
+			headers: {},
+			body: '',
+		};
+	}
+
+	if (isFullResponse(response)) {
+		const headers = normalizeHeaders(response.headers);
+		const body = normalizeBody(response.body, credentials);
+		return {
+			status: response.statusCode ?? 0,
+			headers,
+			body,
+		};
+	}
+
+	if ('status' in response && 'headers' in response && 'body' in response) {
+		const value = response as ClickHouseResponse;
+		return {
+			status: value.status ?? 0,
+			headers: normalizeHeaders(value.headers ?? {}),
+			body: normalizeBody(value.body, credentials),
+		};
+	}
+
+	return {
+		status: 0,
+		headers: {},
+		body: normalizeBody(response, credentials),
+	};
+}
+
+function isFullResponse(response: object): response is IN8nHttpFullResponse {
+	return 'statusCode' in response && 'headers' in response;
+}
+
+function normalizeBody(body: unknown, credentials: ClickHouseCredentials): string {
+	if (body === undefined || body === null) {
+		return '';
+	}
+	if (typeof body === 'string') {
+		return body;
+	}
+	if (Buffer.isBuffer(body)) {
+		return body.toString('utf8');
+	}
+	try {
+		return JSON.stringify(body);
+	} catch {
+		return safeExcerpt(String(body), credentials);
+	}
 }
 
 function sanitizeHost(host: string): string {
@@ -189,20 +265,21 @@ function sanitizeHost(host: string): string {
 	return withoutProtocol.replace(/\/+$/, '');
 }
 
-function normalizeHeaders(headers: IncomingHttpHeaders): Record<string, string> {
+function normalizeHeaders(headers: Record<string, unknown>): Record<string, string> {
 	const result: Record<string, string> = {};
 	for (const [key, value] of Object.entries(headers)) {
-		if (!key || value === undefined) continue;
+		if (!key || value === undefined || value === null) continue;
 		result[key.toLowerCase()] = Array.isArray(value) ? value.join(', ') : String(value);
 	}
 	return result;
 }
 
-function wrapError(error: Error, credentials: ClickHouseCredentials): Error {
-	const message = redactSecrets(error.message, credentials);
-	const wrapped = new Error(`ClickHouse request failed: ${message}`);
-	(wrapped as { cause?: Error }).cause = error;
-	return wrapped;
+function normalizeFetchHeaders(headers: Headers): Record<string, string> {
+	const normalized: Record<string, string> = {};
+	for (const [key, value] of headers.entries()) {
+		normalized[key.toLowerCase()] = value;
+	}
+	return normalized;
 }
 
 function buildResponseError(
@@ -223,7 +300,9 @@ function buildErrorDetail(
 	credentials: ClickHouseCredentials,
 ): string {
 	const contentType = headers['content-type'] || '';
-	const looksJson = contentType.includes('application/json') || body.trim().startsWith('{') || body.trim().startsWith('[');
+	const trimmed = body.trim();
+	const looksJson =
+		contentType.includes('application/json') || trimmed.startsWith('{') || trimmed.startsWith('[');
 
 	if (looksJson) {
 		try {
@@ -256,4 +335,17 @@ function normalizeSettingValue(value: string | number | boolean): string {
 		return value ? '1' : '0';
 	}
 	return String(value);
+}
+
+async function gzipPayload(payload: string | Buffer): Promise<Buffer> {
+	if (typeof CompressionStream !== 'function') {
+		throw new Error('CompressionStream is not available to gzip the request body.');
+	}
+	const stream = new CompressionStream('gzip');
+	const writer = stream.writable.getWriter();
+	const data = typeof payload === 'string' ? new TextEncoder().encode(payload) : payload;
+	await writer.write(data);
+	await writer.close();
+	const arrayBuffer = await new Response(stream.readable).arrayBuffer();
+	return Buffer.from(arrayBuffer);
 }

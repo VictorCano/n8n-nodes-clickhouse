@@ -1,8 +1,9 @@
-import type { ICredentialTestRequest, ICredentialType, INodeProperties } from 'n8n-workflow';
+import type { ICredentialTestRequest, ICredentialType, INodeProperties, Icon } from 'n8n-workflow';
 
 export class ClickHouseApi implements ICredentialType {
 	name = 'ClickHouseApi';
 	displayName = 'ClickHouse API';
+	icon: Icon = { light: 'file:../example.svg', dark: 'file:../example.dark.svg' };
 	properties: INodeProperties[] = [
 		{
 			displayName: 'Protocol',
@@ -59,7 +60,7 @@ export class ClickHouseApi implements ICredentialType {
 			name: 'tlsIgnoreSsl',
 			type: 'boolean',
 			default: false,
-			description: 'Disable SSL certificate verification (HTTPS only)',
+			description: 'Whether to disable SSL certificate verification (HTTPS only)',
 			displayOptions: {
 				show: {
 					protocol: ['https'],
@@ -71,6 +72,7 @@ export class ClickHouseApi implements ICredentialType {
 			name: 'ca',
 			type: 'string',
 			typeOptions: {
+				password: true,
 				rows: 4,
 			},
 			default: '',
@@ -86,6 +88,7 @@ export class ClickHouseApi implements ICredentialType {
 			name: 'cert',
 			type: 'string',
 			typeOptions: {
+				password: true,
 				rows: 4,
 			},
 			default: '',
@@ -101,6 +104,7 @@ export class ClickHouseApi implements ICredentialType {
 			name: 'key',
 			type: 'string',
 			typeOptions: {
+				password: true,
 				rows: 4,
 			},
 			default: '',

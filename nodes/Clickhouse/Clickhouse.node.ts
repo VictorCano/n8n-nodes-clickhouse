@@ -7,7 +7,7 @@ import type {
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { NodeConnectionTypes } from 'n8n-workflow';
+import { ApplicationError, NodeConnectionTypes } from 'n8n-workflow';
 import {
 	request as clickhouseRequest,
 	type ClickHouseCredentials,
@@ -16,7 +16,7 @@ import { buildPaginatedSql, shapeQueryOutput } from './operations/queryUtils';
 import { buildInsertQuery, buildNdjson, chunkRows, parseColumns } from './operations/insertUtils';
 import { parseMetadataJson } from './operations/metadataUtils';
 
-export class Example implements INodeType {
+export class Clickhouse implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'ClickHouse',
 		name: 'clickhouse',
@@ -29,6 +29,7 @@ export class Example implements INodeType {
 		},
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],
+		usableAsTool: true,
 		credentials: [
 			{
 				name: 'ClickHouseApi',
@@ -47,6 +48,7 @@ export class Example implements INodeType {
 					{ name: 'Metadata', value: 'metadata' },
 				],
 				default: 'query',
+				noDataExpression: true,
 			},
 			{
 				displayName: 'Operation',
@@ -57,8 +59,9 @@ export class Example implements INodeType {
 						resource: ['query'],
 					},
 				},
-				options: [{ name: 'Execute Query', value: 'executeQuery' }],
+				options: [{ name: 'Execute Query', value: 'executeQuery', action: 'Execute query' }],
 				default: 'executeQuery',
+				noDataExpression: true,
 			},
 			{
 				displayName: 'Operation',
@@ -69,8 +72,9 @@ export class Example implements INodeType {
 						resource: ['command'],
 					},
 				},
-				options: [{ name: 'Execute Command', value: 'executeCommand' }],
+				options: [{ name: 'Execute Command', value: 'executeCommand', action: 'Execute command' }],
 				default: 'executeCommand',
+				noDataExpression: true,
 			},
 			{
 				displayName: 'Operation',
@@ -82,10 +86,19 @@ export class Example implements INodeType {
 					},
 				},
 				options: [
-					{ name: 'Insert Rows (from input items)', value: 'insertFromItems' },
-					{ name: 'Insert Rows (from JSON array field)', value: 'insertFromJson' },
+					{
+						name: 'Insert Rows (From Input Items)',
+						value: 'insertFromItems',
+						action: 'Insert rows from input items',
+					},
+					{
+						name: 'Insert Rows (From JSON Array Field)',
+						value: 'insertFromJson',
+						action: 'Insert rows from JSON array field',
+					},
 				],
 				default: 'insertFromItems',
+				noDataExpression: true,
 			},
 			{
 				displayName: 'Operation',
@@ -97,11 +110,12 @@ export class Example implements INodeType {
 					},
 				},
 				options: [
-					{ name: 'List Databases', value: 'listDatabases' },
-					{ name: 'List Tables', value: 'listTables' },
-					{ name: 'List Columns', value: 'listColumns' },
+					{ name: 'List Databases', value: 'listDatabases', action: 'List databases' },
+					{ name: 'List Tables', value: 'listTables', action: 'List tables' },
+					{ name: 'List Columns', value: 'listColumns', action: 'List columns' },
 				],
 				default: 'listDatabases',
+				noDataExpression: true,
 			},
 			{
 				displayName: 'Database Override',
@@ -116,7 +130,7 @@ export class Example implements INodeType {
 				},
 			},
 			{
-				displayName: 'Timeout (ms)',
+				displayName: 'Timeout (Ms)',
 				name: 'timeoutMs',
 				type: 'number',
 				default: 60000,
@@ -132,7 +146,7 @@ export class Example implements INodeType {
 				name: 'compress',
 				type: 'boolean',
 				default: true,
-				description: 'Enable HTTP compression',
+				description: 'Whether to enable HTTP compression',
 				displayOptions: {
 					show: {
 						resource: ['query', 'command', 'insert', 'metadata'],
@@ -159,8 +173,11 @@ export class Example implements INodeType {
 				displayName: 'Limit',
 				name: 'limit',
 				type: 'number',
-				default: 100,
-				description: 'Maximum number of rows to return',
+				default: 50,
+				typeOptions: {
+					minValue: 1,
+				},
+				description: 'Max number of results to return',
 				displayOptions: {
 					show: {
 						resource: ['query'],
@@ -173,7 +190,7 @@ export class Example implements INodeType {
 				name: 'paginate',
 				type: 'boolean',
 				default: false,
-				description: 'Fetch additional pages until no more results are returned',
+				description: 'Whether to fetch additional pages until no more results are returned',
 				displayOptions: {
 					show: {
 						resource: ['query'],
@@ -287,7 +304,7 @@ export class Example implements INodeType {
 				name: 'ignoreUnknownFields',
 				type: 'boolean',
 				default: false,
-				description: 'Skip fields not present in the target table',
+				description: 'Whether to skip fields not present in the target table',
 				displayOptions: {
 					show: {
 						resource: ['insert'],
@@ -300,7 +317,7 @@ export class Example implements INodeType {
 				name: 'gzipRequest',
 				type: 'boolean',
 				default: false,
-				description: 'Compress request payload with gzip',
+				description: 'Whether to compress the request payload with gzip',
 				displayOptions: {
 					show: {
 						resource: ['insert'],
@@ -322,11 +339,12 @@ export class Example implements INodeType {
 				},
 			},
 			{
-				displayName: 'Metadata Database',
+				displayName: 'Database Name or ID',
 				name: 'metadataDatabase',
 				type: 'options',
 				default: '',
-				description: 'Database to use for metadata operations',
+				description:
+					'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
 				typeOptions: {
 					loadOptionsMethod: 'getDatabases',
 				},
@@ -338,11 +356,12 @@ export class Example implements INodeType {
 				},
 			},
 			{
-				displayName: 'Table',
+				displayName: 'Table Name or ID',
 				name: 'metadataTable',
 				type: 'options',
 				default: '',
-				description: 'Table name for column metadata',
+				description:
+					'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
 				displayOptions: {
 					show: {
 						resource: ['metadata'],
@@ -366,6 +385,7 @@ export class Example implements INodeType {
 				const timeoutMs = (this.getNodeParameter('timeoutMs', 0) as number) || 60000;
 				const compress = (this.getNodeParameter('compress', 0) as boolean) ?? true;
 				const rows = await fetchMetadataRows({
+					httpRequest: this.helpers.httpRequest,
 					credentials,
 					sql: 'SHOW DATABASES',
 					timeoutMs,
@@ -392,6 +412,7 @@ export class Example implements INodeType {
 					override: metadataDatabase ?? databaseOverride,
 				});
 				const rows = await fetchMetadataRows({
+					httpRequest: this.helpers.httpRequest,
 					credentials,
 					sql: `SHOW TABLES FROM ${database}`,
 					timeoutMs,
@@ -410,6 +431,7 @@ export class Example implements INodeType {
 		const credentials = normalizeCredentials(
 			(await this.getCredentials('ClickHouseApi')) as ClickHouseCredentials,
 		);
+		const httpRequest = this.helpers.httpRequest;
 		const firstResource = this.getNodeParameter('resource', 0) as string;
 		const firstOperation = this.getNodeParameter('operation', 0) as string;
 
@@ -436,6 +458,7 @@ export class Example implements INodeType {
 			}
 
 			const summary = await executeInsert({
+				httpRequest,
 				credentials,
 				databaseOverride,
 				table,
@@ -457,7 +480,12 @@ export class Example implements INodeType {
 		}
 
 		if (firstResource === 'metadata') {
-			const metadataResults = await executeMetadata(this, credentials, firstOperation);
+			const metadataResults = await executeMetadata(
+				this,
+				credentials,
+				firstOperation,
+				this.helpers.httpRequest,
+			);
 			for (const entry of metadataResults) {
 				results.push(entry);
 			}
@@ -480,6 +508,7 @@ export class Example implements INodeType {
 				const compress = this.getNodeParameter('compress', itemIndex) as boolean;
 
 				const queryResult = await executeQuery({
+					httpRequest,
 					credentials,
 					sql,
 					limit,
@@ -520,6 +549,7 @@ export class Example implements INodeType {
 				const compress = this.getNodeParameter('compress', itemIndex) as boolean;
 
 				const response = await clickhouseRequest({
+					httpRequest,
 					credentials,
 					sql,
 					databaseOverride,
@@ -568,6 +598,7 @@ type QueryExecutionOptions = {
 	databaseOverride?: string;
 	timeoutMs: number;
 	compress: boolean;
+	httpRequest: HttpRequestFn;
 };
 
 type QueryExecutionResult = {
@@ -577,8 +608,10 @@ type QueryExecutionResult = {
 	summary: IDataObject;
 };
 
+type HttpRequestFn = IExecuteFunctions['helpers']['httpRequest'];
+
 async function executeQuery(options: QueryExecutionOptions): Promise<QueryExecutionResult> {
-	const { credentials, sql, limit, paginate, databaseOverride, timeoutMs, compress } = options;
+	const { credentials, sql, limit, paginate, databaseOverride, timeoutMs, compress, httpRequest } = options;
 	const safeLimit = Math.max(0, Math.floor(limit));
 	const shouldPaginate = paginate && safeLimit > 0;
 
@@ -591,6 +624,7 @@ async function executeQuery(options: QueryExecutionOptions): Promise<QueryExecut
 		const offset = shouldPaginate ? pageCount * safeLimit : 0;
 		const pagedSql = buildPaginatedSql(sql, safeLimit, offset);
 		const response = await clickhouseRequest({
+			httpRequest,
 			credentials,
 			sql: pagedSql,
 			databaseOverride,
@@ -645,8 +679,8 @@ function parseJsonResponse(body: string, credentials: ClickHouseCredentials): {
 		return parsed ?? {};
 	} catch (error) {
 		const excerpt = safeExcerpt(body, credentials);
-		const message = `Failed to parse ClickHouse JSON response. ${excerpt}`;
-		throw new Error(message, { cause: error instanceof Error ? error : undefined });
+			const message = `Failed to parse ClickHouse JSON response. ${excerpt}`;
+			throw new ApplicationError(message, { cause: error instanceof Error ? error : undefined });
 	}
 }
 
@@ -705,6 +739,7 @@ async function executeMetadata(
 	context: IExecuteFunctions,
 	credentials: ClickHouseCredentials,
 	operation: string,
+	httpRequest: HttpRequestFn,
 ): Promise<MetadataEntry[]> {
 	const databaseOverride = normalizeOptionalString(
 		context.getNodeParameter('databaseOverride', 0) as string,
@@ -722,6 +757,7 @@ async function executeMetadata(
 
 	if (operation === 'listDatabases') {
 		const rows = await fetchMetadataRows({
+			httpRequest,
 			credentials,
 			sql: 'SHOW DATABASES',
 			timeoutMs,
@@ -732,6 +768,7 @@ async function executeMetadata(
 
 	if (operation === 'listTables') {
 		const rows = await fetchMetadataRows({
+			httpRequest,
 			credentials,
 			sql: `SHOW TABLES FROM ${database}`,
 			timeoutMs,
@@ -748,6 +785,7 @@ async function executeMetadata(
 			return [];
 		}
 		const rows = await fetchMetadataRows({
+			httpRequest,
 			credentials,
 			sql: `DESCRIBE TABLE ${database}.${table}`,
 			timeoutMs,
@@ -760,12 +798,14 @@ async function executeMetadata(
 }
 
 async function fetchMetadataRows(options: {
+	httpRequest: HttpRequestFn;
 	credentials: ClickHouseCredentials;
 	sql: string;
 	timeoutMs: number;
 	compress: boolean;
 }): Promise<IDataObject[]> {
 	const response = await clickhouseRequest({
+		httpRequest: options.httpRequest,
 		credentials: options.credentials,
 		sql: `${options.sql} FORMAT JSON`,
 		format: 'JSON',
@@ -801,6 +841,7 @@ function buildOption(value: unknown): INodePropertyOptions | null {
 }
 
 type InsertExecutionOptions = {
+	httpRequest: HttpRequestFn;
 	credentials: ClickHouseCredentials;
 	databaseOverride?: string;
 	table: string;
@@ -815,6 +856,7 @@ type InsertExecutionOptions = {
 
 async function executeInsert(options: InsertExecutionOptions): Promise<IDataObject> {
 	const {
+		httpRequest,
 		credentials,
 		databaseOverride,
 		table,
@@ -847,6 +889,7 @@ async function executeInsert(options: InsertExecutionOptions): Promise<IDataObje
 	for (const batch of batches) {
 		const body = buildNdjson(batch);
 		const response = await clickhouseRequest({
+			httpRequest,
 			credentials,
 			sql: query,
 			databaseOverride,

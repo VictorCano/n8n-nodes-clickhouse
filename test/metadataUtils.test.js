@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseMetadataJson } = require('../dist/nodes/Example/operations/metadataUtils');
+const { parseMetadataJson } = require('../dist/nodes/Clickhouse/operations/metadataUtils');
 
 test('parseMetadataJson returns rows and meta', () => {
 	const payload = {

@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { execSync } = require('node:child_process');
-const { request } = require('../dist/nodes/Example/transport/clickhouseClient');
-const { buildInsertQuery, buildNdjson } = require('../dist/nodes/Example/operations/insertUtils');
+const { request } = require('../../dist/nodes/Clickhouse/transport/clickhouseClient');
+const { buildInsertQuery, buildNdjson } = require('../../dist/nodes/Clickhouse/operations/insertUtils');
 
 const image = process.env.CLICKHOUSE_TEST_IMAGE || 'clickhouse/clickhouse-server:latest';
 const containerName = `clickhouse-test-${Date.now()}`;
