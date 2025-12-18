@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildPaginatedSql, shapeQueryOutput } = require('../dist/src/operations/queryUtils');
+const { buildPaginatedSql, shapeQueryOutput } = require('../dist/nodes/Example/operations/queryUtils');
 
 test('buildPaginatedSql wraps query with limit and offset', () => {
 	const sql = 'SELECT id FROM logs;';

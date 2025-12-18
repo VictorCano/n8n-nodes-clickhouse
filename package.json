@@ -32,7 +32,7 @@
 		"n8nNodesApiVersion": 1,
 		"strict": true,
 		"credentials": [
-			"dist/credentials/ClickHouseApi.credentials.js"
+			"dist/nodes/Example/credentials/ClickHouseApi.credentials.js"
 		],
 		"nodes": [
 			"dist/nodes/Example/Example.node.js"

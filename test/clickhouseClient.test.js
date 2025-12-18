@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildBaseUrl, buildQueryString } = require('../dist/src/transport/clickhouseClient');
+const { buildBaseUrl, buildQueryString } = require('../dist/nodes/Example/transport/clickhouseClient');
 
 test('buildBaseUrl builds protocol host port', () => {
 	const baseUrl = buildBaseUrl({

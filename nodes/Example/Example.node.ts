@@ -1,7 +1,9 @@
 import type {
 	IDataObject,
 	IExecuteFunctions,
+	ILoadOptionsFunctions,
 	INodeExecutionData,
+	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
@@ -9,9 +11,10 @@ import { NodeConnectionTypes } from 'n8n-workflow';
 import {
 	request as clickhouseRequest,
 	type ClickHouseCredentials,
-} from '../../src/transport/clickhouseClient';
-import { buildPaginatedSql, shapeQueryOutput } from '../../src/operations/queryUtils';
-import { buildInsertQuery, buildNdjson, chunkRows, parseColumns } from '../../src/operations/insertUtils';
+} from './transport/clickhouseClient';
+import { buildPaginatedSql, shapeQueryOutput } from './operations/queryUtils';
+import { buildInsertQuery, buildNdjson, chunkRows, parseColumns } from './operations/insertUtils';
+import { parseMetadataJson } from './operations/metadataUtils';
 
 export class Example implements INodeType {
 	description: INodeTypeDescription = {
@@ -319,9 +322,25 @@ export class Example implements INodeType {
 				},
 			},
 			{
+				displayName: 'Metadata Database',
+				name: 'metadataDatabase',
+				type: 'options',
+				default: '',
+				description: 'Database to use for metadata operations',
+				typeOptions: {
+					loadOptionsMethod: 'getDatabases',
+				},
+				displayOptions: {
+					show: {
+						resource: ['metadata'],
+						operation: ['listTables', 'listColumns'],
+					},
+				},
+			},
+			{
 				displayName: 'Table',
 				name: 'metadataTable',
-				type: 'string',
+				type: 'options',
 				default: '',
 				description: 'Table name for column metadata',
 				displayOptions: {
@@ -330,8 +349,59 @@ export class Example implements INodeType {
 						operation: ['listColumns'],
 					},
 				},
+				typeOptions: {
+					loadOptionsMethod: 'getTables',
+					loadOptionsDependsOn: ['databaseOverride', 'metadataDatabase'],
+				},
 			},
 		],
+	};
+
+	methods = {
+		loadOptions: {
+			async getDatabases(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				const credentials = normalizeCredentials(
+					(await this.getCredentials('ClickHouseApi')) as ClickHouseCredentials,
+				);
+				const timeoutMs = (this.getNodeParameter('timeoutMs', 0) as number) || 60000;
+				const compress = (this.getNodeParameter('compress', 0) as boolean) ?? true;
+				const rows = await fetchMetadataRows({
+					credentials,
+					sql: 'SHOW DATABASES',
+					timeoutMs,
+					compress,
+				});
+				return rows
+					.map((row) => buildOption(row.name ?? row.database ?? row.Database))
+					.filter((entry): entry is INodePropertyOptions => Boolean(entry));
+			},
+			async getTables(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				const credentials = normalizeCredentials(
+					(await this.getCredentials('ClickHouseApi')) as ClickHouseCredentials,
+				);
+				const timeoutMs = (this.getNodeParameter('timeoutMs', 0) as number) || 60000;
+				const compress = (this.getNodeParameter('compress', 0) as boolean) ?? true;
+				const databaseOverride = normalizeOptionalString(
+					(this.getNodeParameter('databaseOverride', 0) as string) ?? '',
+				);
+				const metadataDatabase = normalizeOptionalString(
+					(this.getNodeParameter('metadataDatabase', 0) as string) ?? '',
+				);
+				const database = pickDatabase({
+					credentials,
+					override: metadataDatabase ?? databaseOverride,
+				});
+				const rows = await fetchMetadataRows({
+					credentials,
+					sql: `SHOW TABLES FROM ${database}`,
+					timeoutMs,
+					compress,
+				});
+				return rows
+					.map((row) => buildOption(row.name ?? row.table ?? row.Table))
+					.filter((entry): entry is INodePropertyOptions => Boolean(entry));
+			},
+		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -383,6 +453,14 @@ export class Example implements INodeType {
 				pairedItem: { item: 0 },
 			});
 
+			return [results];
+		}
+
+		if (firstResource === 'metadata') {
+			const metadataResults = await executeMetadata(this, credentials, firstOperation);
+			for (const entry of metadataResults) {
+				results.push(entry);
+			}
 			return [results];
 		}
 
@@ -618,6 +696,107 @@ function normalizeCredentials(credentials: ClickHouseCredentials): ClickHouseCre
 		protocol: credentials.protocol === 'http' ? 'http' : 'https',
 		port: credentials.port ?? 8123,
 		tlsIgnoreSsl: Boolean(credentials.tlsIgnoreSsl),
+	};
+}
+
+type MetadataEntry = INodeExecutionData;
+
+async function executeMetadata(
+	context: IExecuteFunctions,
+	credentials: ClickHouseCredentials,
+	operation: string,
+): Promise<MetadataEntry[]> {
+	const databaseOverride = normalizeOptionalString(
+		context.getNodeParameter('databaseOverride', 0) as string,
+	);
+	const metadataDatabase = normalizeOptionalString(
+		(context.getNodeParameter('metadataDatabase', 0) as string) ?? '',
+	);
+	const timeoutMs = (context.getNodeParameter('timeoutMs', 0) as number) || 60000;
+	const compress = (context.getNodeParameter('compress', 0) as boolean) ?? true;
+
+	const database = pickDatabase({
+		credentials,
+		override: metadataDatabase ?? databaseOverride,
+	});
+
+	if (operation === 'listDatabases') {
+		const rows = await fetchMetadataRows({
+			credentials,
+			sql: 'SHOW DATABASES',
+			timeoutMs,
+			compress,
+		});
+		return rows.map((row) => ({ json: row }));
+	}
+
+	if (operation === 'listTables') {
+		const rows = await fetchMetadataRows({
+			credentials,
+			sql: `SHOW TABLES FROM ${database}`,
+			timeoutMs,
+			compress,
+		});
+		return rows.map((row) => ({ json: row }));
+	}
+
+	if (operation === 'listColumns') {
+		const table = normalizeOptionalString(
+			context.getNodeParameter('metadataTable', 0) as string,
+		);
+		if (!table) {
+			return [];
+		}
+		const rows = await fetchMetadataRows({
+			credentials,
+			sql: `DESCRIBE TABLE ${database}.${table}`,
+			timeoutMs,
+			compress,
+		});
+		return rows.map((row) => ({ json: row }));
+	}
+
+	return [];
+}
+
+async function fetchMetadataRows(options: {
+	credentials: ClickHouseCredentials;
+	sql: string;
+	timeoutMs: number;
+	compress: boolean;
+}): Promise<IDataObject[]> {
+	const response = await clickhouseRequest({
+		credentials: options.credentials,
+		sql: `${options.sql} FORMAT JSON`,
+		format: 'JSON',
+		waitEndOfQuery: true,
+		compress: options.compress,
+		timeoutMs: options.timeoutMs,
+	});
+
+	const parsed = parseMetadataJson(response.body);
+	return parsed.rows;
+}
+
+function pickDatabase(options: {
+	credentials: ClickHouseCredentials;
+	override?: string;
+}): string {
+	const override = options.override?.trim();
+	if (override) {
+		return override;
+	}
+	const fallback = options.credentials.defaultDatabase?.trim();
+	return fallback || 'default';
+}
+
+function buildOption(value: unknown): INodePropertyOptions | null {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+	return {
+		name: trimmed,
+		value: trimmed,
 	};
 }
 
