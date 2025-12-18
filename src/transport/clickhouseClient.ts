@@ -1,7 +1,7 @@
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import type { IncomingHttpHeaders, RequestOptions } from 'node:http';
-import { createGunzip } from 'node:zlib';
+import { createGunzip, gzipSync } from 'node:zlib';
 
 export type ClickHouseCredentials = {
 	protocol: 'http' | 'https';
@@ -23,8 +23,13 @@ export type ClickHouseRequestOptions = {
 	databaseOverride?: string;
 	format?: string;
 	compress?: boolean;
+	settings?: Record<string, string | number | boolean>;
 	timeoutMs?: number;
 	waitEndOfQuery?: boolean;
+	queryInUrl?: boolean;
+	body?: string | Buffer;
+	requestHeaders?: Record<string, string>;
+	gzipRequest?: boolean;
 };
 
 export type ClickHouseResponse = {
@@ -44,7 +49,9 @@ export function buildQueryString(options: {
 	database?: string;
 	format?: string;
 	compress?: boolean;
+	settings?: Record<string, string | number | boolean>;
 	waitEndOfQuery?: boolean;
+	query?: string;
 }): string {
 	const params = new URLSearchParams();
 
@@ -63,6 +70,16 @@ export function buildQueryString(options: {
 		params.set('wait_end_of_query', '1');
 	}
 
+	if (options.query) {
+		params.set('query', options.query);
+	}
+
+	if (options.settings) {
+		for (const [key, value] of Object.entries(options.settings)) {
+			params.set(key, normalizeSettingValue(value));
+		}
+	}
+
 	const query = params.toString();
 	return query ? `?${query}` : '';
 }
@@ -71,11 +88,14 @@ export async function request(options: ClickHouseRequestOptions): Promise<ClickH
 	const { credentials, sql } = options;
 	const timeoutMs = options.timeoutMs ?? 60_000;
 	const database = options.databaseOverride ?? credentials.defaultDatabase;
+	const queryInUrl = options.queryInUrl ?? false;
 	const queryString = buildQueryString({
 		database,
 		format: options.format,
 		compress: options.compress,
+		settings: options.settings,
 		waitEndOfQuery: options.waitEndOfQuery,
+		query: queryInUrl ? sql : undefined,
 	});
 
 	const hostname = sanitizeHost(credentials.host);
@@ -84,12 +104,24 @@ export async function request(options: ClickHouseRequestOptions): Promise<ClickH
 		'Accept-Encoding': 'gzip',
 		'Content-Type': 'text/plain; charset=utf-8',
 	};
+	if (options.requestHeaders) {
+		Object.assign(headers, options.requestHeaders);
+	}
 
 	const authToken = Buffer.from(`${credentials.username}:${credentials.password}`, 'utf8').toString(
 		'base64',
 	);
 	headers.Authorization = `Basic ${authToken}`;
-	headers['Content-Length'] = Buffer.byteLength(sql, 'utf8').toString();
+
+	const bodyPayload = options.body ?? (queryInUrl ? '' : sql);
+	const bodyBuffer = Buffer.isBuffer(bodyPayload)
+		? bodyPayload
+		: Buffer.from(bodyPayload, 'utf8');
+	const requestBody = options.gzipRequest ? gzipSync(bodyBuffer) : bodyBuffer;
+	if (options.gzipRequest) {
+		headers['Content-Encoding'] = 'gzip';
+	}
+	headers['Content-Length'] = requestBody.length.toString();
 
 	const requestOptions: RequestOptions & {
 		rejectUnauthorized?: boolean;
@@ -146,7 +178,7 @@ export async function request(options: ClickHouseRequestOptions): Promise<ClickH
 			req.destroy(new Error(`Request timed out after ${timeoutMs}ms`));
 		});
 
-		req.write(sql);
+		req.write(requestBody);
 		req.end();
 	});
 }
@@ -217,4 +249,11 @@ function redactSecrets(value: string, credentials: ClickHouseCredentials): strin
 		output = output.split(secret).join('***');
 	}
 	return output;
+}
+
+function normalizeSettingValue(value: string | number | boolean): string {
+	if (typeof value === 'boolean') {
+		return value ? '1' : '0';
+	}
+	return String(value);
 }

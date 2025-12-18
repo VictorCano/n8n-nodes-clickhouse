@@ -11,6 +11,7 @@ import {
 	type ClickHouseCredentials,
 } from '../../src/transport/clickhouseClient';
 import { buildPaginatedSql, shapeQueryOutput } from '../../src/operations/queryUtils';
+import { buildInsertQuery, buildNdjson, chunkRows, parseColumns } from '../../src/operations/insertUtils';
 
 export class Example implements INodeType {
 	description: INodeTypeDescription = {
@@ -223,6 +224,88 @@ export class Example implements INodeType {
 				},
 			},
 			{
+				displayName: 'Columns (CSV)',
+				name: 'columnsCsv',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated list of columns to insert',
+				displayOptions: {
+					show: {
+						resource: ['insert'],
+						operation: ['insertFromItems', 'insertFromJson'],
+					},
+				},
+			},
+			{
+				displayName: 'Columns',
+				name: 'columnsUi',
+				type: 'fixedCollection',
+				default: {},
+				typeOptions: {
+					multipleValues: true,
+				},
+				description: 'Optional list of columns to insert',
+				options: [
+					{
+						name: 'columns',
+						displayName: 'Columns',
+						values: [
+							{
+								displayName: 'Column',
+								name: 'column',
+								type: 'string',
+								default: '',
+							},
+						],
+					},
+				],
+				displayOptions: {
+					show: {
+						resource: ['insert'],
+						operation: ['insertFromItems', 'insertFromJson'],
+					},
+				},
+			},
+			{
+				displayName: 'Batch Size',
+				name: 'batchSize',
+				type: 'number',
+				default: 1000,
+				description: 'Number of rows per insert batch',
+				displayOptions: {
+					show: {
+						resource: ['insert'],
+						operation: ['insertFromItems', 'insertFromJson'],
+					},
+				},
+			},
+			{
+				displayName: 'Ignore Unknown Fields',
+				name: 'ignoreUnknownFields',
+				type: 'boolean',
+				default: false,
+				description: 'Skip fields not present in the target table',
+				displayOptions: {
+					show: {
+						resource: ['insert'],
+						operation: ['insertFromItems', 'insertFromJson'],
+					},
+				},
+			},
+			{
+				displayName: 'Gzip Request',
+				name: 'gzipRequest',
+				type: 'boolean',
+				default: false,
+				description: 'Compress request payload with gzip',
+				displayOptions: {
+					show: {
+						resource: ['insert'],
+						operation: ['insertFromItems', 'insertFromJson'],
+					},
+				},
+			},
+			{
 				displayName: 'JSON Array Field',
 				name: 'jsonArrayField',
 				type: 'string',
@@ -257,6 +340,51 @@ export class Example implements INodeType {
 		const credentials = normalizeCredentials(
 			(await this.getCredentials('ClickHouseApi')) as ClickHouseCredentials,
 		);
+		const firstResource = this.getNodeParameter('resource', 0) as string;
+		const firstOperation = this.getNodeParameter('operation', 0) as string;
+
+		if (firstResource === 'insert') {
+			const databaseOverride = normalizeOptionalString(
+				this.getNodeParameter('databaseOverride', 0) as string,
+			);
+			const table = this.getNodeParameter('table', 0) as string;
+			const columnsCsv = this.getNodeParameter('columnsCsv', 0) as string;
+			const columnsUi = this.getNodeParameter('columnsUi', 0);
+			const batchSize = this.getNodeParameter('batchSize', 0) as number;
+			const ignoreUnknownFields = this.getNodeParameter('ignoreUnknownFields', 0) as boolean;
+			const gzipRequest = this.getNodeParameter('gzipRequest', 0) as boolean;
+			const timeoutMs = this.getNodeParameter('timeoutMs', 0) as number;
+			const compress = this.getNodeParameter('compress', 0) as boolean;
+
+			let rows: IDataObject[] = [];
+			if (firstOperation === 'insertFromItems') {
+				rows = items.map((item) => item.json).filter(isRecord);
+			} else if (firstOperation === 'insertFromJson') {
+				rows = collectRowsFromJsonField(items, (itemIndex) =>
+					this.getNodeParameter('jsonArrayField', itemIndex) as string,
+				);
+			}
+
+			const summary = await executeInsert({
+				credentials,
+				databaseOverride,
+				table,
+				columns: parseColumns({ columnsCsv, columnsUi }),
+				batchSize,
+				ignoreUnknownFields,
+				gzipRequest,
+				timeoutMs,
+				compress,
+				rows,
+			});
+
+			results.push({
+				json: summary,
+				pairedItem: { item: 0 },
+			});
+
+			return [results];
+		}
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			const resource = this.getNodeParameter('resource', itemIndex) as string;
@@ -491,4 +619,108 @@ function normalizeCredentials(credentials: ClickHouseCredentials): ClickHouseCre
 		port: credentials.port ?? 8123,
 		tlsIgnoreSsl: Boolean(credentials.tlsIgnoreSsl),
 	};
+}
+
+type InsertExecutionOptions = {
+	credentials: ClickHouseCredentials;
+	databaseOverride?: string;
+	table: string;
+	columns: string[];
+	batchSize: number;
+	ignoreUnknownFields: boolean;
+	gzipRequest: boolean;
+	timeoutMs: number;
+	compress: boolean;
+	rows: IDataObject[];
+};
+
+async function executeInsert(options: InsertExecutionOptions): Promise<IDataObject> {
+	const {
+		credentials,
+		databaseOverride,
+		table,
+		columns,
+		batchSize,
+		ignoreUnknownFields,
+		gzipRequest,
+		timeoutMs,
+		compress,
+		rows,
+	} = options;
+
+	if (!rows.length) {
+		return {
+			inserted: 0,
+			batches: 0,
+			headers: {},
+		};
+	}
+
+	const query = buildInsertQuery({
+		database: databaseOverride,
+		table,
+		columns,
+	});
+	const batches = chunkRows(rows, batchSize);
+	let inserted = 0;
+	let headers: Record<string, string> = {};
+
+	for (const batch of batches) {
+		const body = buildNdjson(batch);
+		const response = await clickhouseRequest({
+			credentials,
+			sql: query,
+			databaseOverride,
+			compress,
+			timeoutMs,
+			waitEndOfQuery: true,
+			queryInUrl: true,
+			body,
+			gzipRequest,
+			settings: ignoreUnknownFields ? { input_format_skip_unknown_fields: 1 } : undefined,
+		});
+
+		inserted += batch.length;
+		headers = sanitizeHeaders(response.headers);
+	}
+
+	return {
+		inserted,
+		batches: batches.length,
+		headers,
+	};
+}
+
+function collectRowsFromJsonField(
+	items: INodeExecutionData[],
+	getPathForItem: (index: number) => string,
+): IDataObject[] {
+	const rows: IDataObject[] = [];
+	for (let index = 0; index < items.length; index++) {
+		const path = getPathForItem(index);
+		const value = getValueAtPath(items[index].json, path);
+		if (!Array.isArray(value)) {
+			continue;
+		}
+		for (const entry of value) {
+			if (isRecord(entry)) {
+				rows.push(entry);
+			}
+		}
+	}
+	return rows;
+}
+
+function getValueAtPath(input: IDataObject, path: string): unknown {
+	if (!path) return undefined;
+	const segments = path.match(/[^.[\]]+/g) ?? [];
+	let current: unknown = input;
+	for (const segment of segments) {
+		if (current && typeof current === 'object' && segment in (current as IDataObject)) {
+			current = (current as IDataObject)[segment];
+		} else {
+			return undefined;
+		}
+	}
+	return current;
 }
