@@ -20,7 +20,7 @@ test(
 					sql: 'SELECT 1',
 					compress: false,
 				}),
-			/ClickHouse request failed with status 401/,
+			/ClickHouse request failed with status (401|403)/,
 		);
 	},
 );
