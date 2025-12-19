@@ -4,7 +4,27 @@ on:
   pull_request:
 
 jobs:
+  label-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check release label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = (context.payload.pull_request?.labels ?? []).map((label) => String(label.name).toLowerCase());
+            const allowed = ['major', 'minor', 'patch'];
+            const found = allowed.filter((label) => labels.includes(label));
+
+            if (!found.length) {
+              core.setFailed('Missing release label. Add one of: Major, Minor, Patch.');
+              return;
+            }
+
+            core.info(`Release label(s) detected: ${found.join(', ')}`);
+
   test:
+    needs: label-check
     runs-on: ubuntu-latest
 
     steps:
@@ -31,4 +51,4 @@ jobs:
         run: 'npm run test:integration'
 
       - name: Scan community package
-        run: 'npx @n8n/scan-community-package n8n-nodes-clickhouse'
+        run: 'npx @n8n/scan-community-package @victorcano/n8n-nodes-clickhouse'
