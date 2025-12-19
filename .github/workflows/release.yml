@@ -139,9 +139,17 @@ jobs:
           NEXT_VERSION="$(npm version "${RELEASE_TYPE}" --no-git-tag-version)"
           NEXT_VERSION="${NEXT_VERSION#v}"
           npx auto-changelog -p
-          git checkout -b "release/v${NEXT_VERSION}"
+          if git show-ref --quiet "refs/remotes/origin/release/v${NEXT_VERSION}"; then
+            git checkout -B "release/v${NEXT_VERSION}" "origin/release/v${NEXT_VERSION}"
+          else
+            git checkout -b "release/v${NEXT_VERSION}"
+          fi
           git add package.json package-lock.json CHANGELOG.md
-          git commit -m "chore(release): v${NEXT_VERSION} [skip ci]"
+          if git diff --cached --quiet; then
+            echo "No release changes to commit."
+          else
+            git commit -m "chore(release): v${NEXT_VERSION} [skip ci]"
+          fi
           git push -u origin "release/v${NEXT_VERSION}"
           echo "next_version=${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
 
