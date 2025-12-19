@@ -1,7 +1,7 @@
 {
-    "name": "n8n-nodes-clickhouse",
-    "version": "0.1.0",
-	"description": "ClickHouse community node for n8n",
+    "name": "@victorcano/n8n-nodes-clickhouse",
+    "version": "0.0.1",
+    "description": "ClickHouse community node for n8n",
     "license": "MIT",
     "homepage": "",
     "keywords": [
@@ -13,45 +13,48 @@
     },
     "repository": {
         "type": "git",
-		"url": "https://github.com/VictorCano/n8n-nodes-clickhouse.git"
+        "url": "https://github.com/VictorCano/n8n-nodes-clickhouse.git"
     },
-	"scripts": {
-		"build": "n8n-node build",
-		"build:watch": "tsc --watch",
-		"dev": "n8n-node dev",
-		"lint": "n8n-node lint",
-		"lint:fix": "n8n-node lint --fix",
-		"test:unit": "npm run build && node --test test/*.test.js",
-		"test:integration": "node --test test/integration/*.test.js",
-		"test": "npm run test:unit && npm run test:integration",
-		"prepare": "husky install",
-		"release": "n8n-node release",
-		"prepublishOnly": "n8n-node prerelease"
-	},
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "node scripts/build.js",
+        "build:watch": "tsc --watch",
+        "dev": "n8n-node dev",
+        "lint": "n8n-node lint",
+        "lint:fix": "n8n-node lint --fix",
+        "test:unit": "npm run build && node --test test/*.test.js",
+        "test:integration": "node --test test/integration/*.test.js",
+        "test": "npm run test:unit && npm run test:integration",
+        "prepare": "husky install",
+        "release": "n8n-node release",
+        "prepublishOnly": "n8n-node prerelease"
+    },
     "files": [
         "dist"
     ],
-	"n8n": {
-		"n8nNodesApiVersion": 1,
-		"strict": false,
-		"credentials": [
-			"dist/nodes/Clickhouse/credentials/ClickHouseApi.credentials.js"
-		],
-		"nodes": [
-			"dist/nodes/Clickhouse/Clickhouse.node.js"
-		]
-	},
-	"devDependencies": {
-		"@types/node": "^22.0.0",
-		"@n8n/node-cli": "*",
-		"@typescript-eslint/eslint-plugin": "^8.0.0",
-		"@typescript-eslint/parser": "^8.0.0",
-		"eslint": "9.32.0",
-		"husky": "^9.0.0",
-		"prettier": "3.6.2",
-		"release-it": "^19.0.4",
-		"typescript": "5.9.2"
-	},
+    "n8n": {
+        "n8nNodesApiVersion": 1,
+        "strict": false,
+        "credentials": [
+            "dist/nodes/Clickhouse/credentials/ClickHouseApi.credentials.js"
+        ],
+        "nodes": [
+            "dist/nodes/Clickhouse/Clickhouse.node.js"
+        ]
+    },
+    "devDependencies": {
+        "@types/node": "^22.0.0",
+        "@n8n/node-cli": "*",
+        "@typescript-eslint/eslint-plugin": "^8.0.0",
+        "@typescript-eslint/parser": "^8.0.0",
+        "eslint": "9.32.0",
+        "husky": "^9.0.0",
+        "prettier": "3.6.2",
+        "release-it": "^19.0.4",
+        "typescript": "5.9.2"
+    },
     "peerDependencies": {
         "n8n-workflow": "*"
     }

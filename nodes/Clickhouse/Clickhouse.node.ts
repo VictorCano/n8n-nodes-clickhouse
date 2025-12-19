@@ -20,7 +20,7 @@ export class Clickhouse implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'ClickHouse',
 		name: 'clickhouse',
-		icon: { light: 'file:example.svg', dark: 'file:example.dark.svg' },
+		icon: { light: 'file:clickhouse.svg', dark: 'file:clickhouse.dark.svg' },
 		group: ['input'],
 		version: 1,
 		description: 'Work with ClickHouse',

@@ -1,5 +1,5 @@
 {
-  "name": "ClickHouse - Execute Query",
+  "name": "ClickHouse - List Tables (Dev)",
   "nodes": [
     {
       "parameters": {},
@@ -7,28 +7,30 @@
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
-        "resource": "query",
-        "operation": "executeQuery",
-        "query": "SELECT 1 AS value",
-        "limit": 50,
-        "paginate": false,
-        "outputMode": "single",
-        "databaseOverride": "",
+        "resource": "metadata",
+        "operation": "listTables",
+        "databaseOverride": "test",
+        "metadataDatabase": "",
         "timeoutMs": 60000,
         "compress": true
       },
       "id": "2",
       "name": "ClickHouse",
-      "type": "@victorcano/n8n-nodes-clickhouse.clickhouse",
+      "type": "CUSTOM.clickhouse",
       "typeVersion": 1,
-      "position": [460, 300],
+      "position": [
+        460,
+        300
+      ],
       "credentials": {
         "ClickHouseApi": {
-          "id": "1",
           "name": "ClickHouse Local"
         }
       }
