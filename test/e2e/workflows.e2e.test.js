@@ -87,7 +87,76 @@ async function getClickHouseCredential() {
 	if (!match) {
 		throw new Error('No ClickHouseApi credential found in n8n');
 	}
-	return { id: match.id, name: match.name };
+	let data = match.data || {};
+	if (typeof data === 'string') {
+		try {
+			data = JSON.parse(data);
+		} catch {
+			data = {};
+		}
+	}
+	return { id: match.id, name: match.name, data };
+}
+
+function collectTablesFromWorkflow(workflow, credentialData) {
+	const tables = new Set();
+	const fallbackDb = (credentialData?.defaultDatabase || 'default').trim() || 'default';
+	for (const node of workflow.nodes || []) {
+		if (!node?.parameters) continue;
+		if (node.parameters.resource === 'insert') {
+			const table = String(node.parameters.table || '').trim();
+			if (!table) continue;
+			const override = String(node.parameters.databaseOverride || '').trim();
+			const database = override || fallbackDb;
+			const name = table.includes('.') ? table : `${database}.${table}`;
+			tables.add(name);
+			continue;
+		}
+		if (node.parameters.resource === 'command') {
+			const sql = String(node.parameters.command || '');
+			const match = sql.match(/create\s+table\s+(if\s+not\s+exists\s+)?([`"\w.]+)/i);
+			if (!match) continue;
+			let tableName = match[2].replace(/[`\"]/g, '');
+			if (!tableName) continue;
+			const override = String(node.parameters.databaseOverride || '').trim();
+			const database = override || fallbackDb;
+			if (!tableName.includes('.')) {
+				tableName = `${database}.${tableName}`;
+			}
+			tables.add(tableName);
+		}
+	}
+	return Array.from(tables);
+}
+
+async function cleanupTables(tables, credentialData) {
+	if (!tables.length) return;
+	const protocol = credentialData?.protocol || 'http';
+	let host = credentialData?.host || 'localhost';
+	const port = credentialData?.port || (protocol === 'https' ? 8443 : 8123);
+	const username = credentialData?.username || 'default';
+	const password = credentialData?.password || '';
+	if (host === 'clickhouse' || host === 'clickhouse_tls') {
+		host = 'localhost';
+	}
+	const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+	for (const table of tables) {
+		const sql = `DROP TABLE IF EXISTS ${table}`;
+		const url = `${protocol}://${host}:${port}/?query=${encodeURIComponent(sql)}`;
+		if (protocol === 'https' && credentialData?.tlsIgnoreSsl) {
+			const script = `node -e "const https=require('https');const url='${url}';const auth='${authHeader}';const req=https.request(url,{method:'POST',headers:{Authorization:auth},rejectUnauthorized:false},res=>{res.on('data',()=>{});res.on('end',()=>{process.exit(res.statusCode>=400?1:0);});});req.on('error',()=>process.exit(1));req.end();"`;
+			dockerExec(script, { allowFailure: true });
+			continue;
+		}
+		try {
+			const res = await fetch(url, { method: 'POST', headers: { Authorization: authHeader } });
+			if (!res.ok) {
+				await res.text();
+			}
+		} catch {
+			// ignore cleanup failures
+		}
+	}
 }
 
 async function createWorkflow(definition) {
@@ -144,6 +213,7 @@ test(
 		const examplesDir = path.join(process.cwd(), 'examples');
 		const entries = await fsp.readdir(examplesDir);
 		const exampleFiles = entries.filter((file) => file.endsWith('.json'));
+		const tablesToCleanup = new Set();
 
 		for (const file of exampleFiles) {
 			const content = await fsp.readFile(path.join(examplesDir, file), 'utf8');
@@ -173,6 +243,10 @@ test(
 			assert.ok(resultData, 'Missing result data');
 			assert.ok(!resultData.error, 'Workflow execution reported an error');
 			assert.ok(resultData.runData, 'Missing run data');
+			const tables = collectTablesFromWorkflow(workflow, credential.data);
+			for (const table of tables) tablesToCleanup.add(table);
 		}
+
+		await cleanupTables(Array.from(tablesToCleanup), credential.data);
 	},
 );
