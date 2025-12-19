@@ -16,6 +16,9 @@ This will start:
 
 Open `http://localhost:5678` in your browser.
 
+The n8n database is stored in `docker/data/n8n` so it persists across container recreations.
+ClickHouse data is stored in `docker/data/clickhouse` (HTTP) and `docker/data/clickhouse-tls` (HTTPS).
+
 ## Develop with live code
 
 The docker-compose setup mounts this repo into the n8n community nodes folder so updates to `dist/` are picked up automatically.

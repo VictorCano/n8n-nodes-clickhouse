@@ -7,8 +7,10 @@ const baseConfig = Array.isArray(n8nConfig) ? n8nConfig : [n8nConfig];
 export default [
 	...baseConfig,
 	{
+		ignores: ['dist/**', 'docker/data/**'],
+	},
+	{
 		files: ['**/*.ts'],
-		ignores: ['dist/**'],
 		languageOptions: {
 			parser: tsparser,
 			parserOptions: {

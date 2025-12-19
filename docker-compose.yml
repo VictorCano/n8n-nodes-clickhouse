@@ -9,7 +9,7 @@ services:
       - CLICKHOUSE_PASSWORD=clickhouse
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
     volumes:
-      - clickhouse-data:/var/lib/clickhouse
+      - ./docker/data/clickhouse:/var/lib/clickhouse
       - ./docker/clickhouse/init:/docker-entrypoint-initdb.d:ro
 
   clickhouse_tls:
@@ -22,7 +22,7 @@ services:
       - CLICKHOUSE_PASSWORD=clickhouse
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
     volumes:
-      - clickhouse-tls-data:/var/lib/clickhouse
+      - ./docker/data/clickhouse-tls:/var/lib/clickhouse
       - ./docker/clickhouse/init:/docker-entrypoint-initdb.d:ro
       - ./docker/clickhouse/tls/https.xml:/etc/clickhouse-server/config.d/https.xml:ro
       - ./docker/clickhouse/tls/server.crt:/etc/clickhouse-server/certs/server.crt:ro
@@ -42,13 +42,8 @@ services:
       - N8N_DIAGNOSTICS_ENABLED=false
       - N8N_PERSONALIZATION_ENABLED=false
     volumes:
-      - n8n-data:/home/node/.n8n
+      - ./docker/data/n8n:/home/node/.n8n
       - ./:/home/node/.n8n/nodes/node_modules/@victorcano/n8n-nodes-clickhouse
     depends_on:
       - clickhouse
       - clickhouse_tls
-
-volumes:
-  clickhouse-data:
-  clickhouse-tls-data:
-  n8n-data:
