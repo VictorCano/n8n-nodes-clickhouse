@@ -14,6 +14,36 @@
     },
     {
       "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "id",
+              "value": 1
+            }
+          ],
+          "string": [
+            {
+              "name": "event",
+              "value": "signup"
+            },
+            {
+              "name": "created_at",
+              "value": "2025-01-01 00:00:00"
+            }
+          ]
+        }
+      },
+      "id": "3",
+      "name": "Set",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        240,
+        520
+      ]
+    },
+    {
+      "parameters": {
         "resource": "insert",
         "operation": "insertFromItems",
         "databaseOverride": "test",
@@ -31,39 +61,13 @@
       "typeVersion": 1,
       "position": [
         460,
-        300
+        520
       ],
       "credentials": {
         "ClickHouseApi": {
           "name": "ClickHouse Local"
         }
       }
-    },
-    {
-      "parameters": {
-        "values": {
-          "string": [
-            {
-              "name": "event",
-              "value": "signup"
-            }
-          ],
-          "number": [
-            {
-              "name": "id",
-              "value": 1
-            }
-          ]
-        }
-      },
-      "id": "3",
-      "name": "Set",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 2,
-      "position": [
-        240,
-        520
-      ]
     }
   ],
   "connections": {

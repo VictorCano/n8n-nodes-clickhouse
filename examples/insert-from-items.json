@@ -7,18 +7,40 @@
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [200, 300]
+      "position": [
+        200,
+        300
+      ]
     },
     {
       "parameters": {
-        "language": "javascript",
-        "jsCode": "return [{ json: { id: 1, name: 'alpha', event_date: '2025-01-01' } }, { json: { id: 2, name: 'beta', event_date: '2025-01-02' } }];"
+        "values": {
+          "number": [
+            {
+              "name": "id",
+              "value": 1
+            }
+          ],
+          "string": [
+            {
+              "name": "event",
+              "value": "signup"
+            },
+            {
+              "name": "created_at",
+              "value": "2025-01-01 00:00:00"
+            }
+          ]
+        }
       },
       "id": "2",
-      "name": "Code",
-      "type": "n8n-nodes-base.code",
+      "name": "Set",
+      "type": "n8n-nodes-base.set",
       "typeVersion": 2,
-      "position": [400, 300]
+      "position": [
+        420,
+        300
+      ]
     },
     {
       "parameters": {
@@ -26,7 +48,7 @@
         "operation": "insertFromItems",
         "databaseOverride": "test",
         "table": "events",
-        "columnsCsv": "id,name,event_date",
+        "columnsCsv": "id,event,created_at",
         "batchSize": 1000,
         "ignoreUnknownFields": false,
         "gzipRequest": false,
@@ -37,7 +59,10 @@
       "name": "ClickHouse",
       "type": "@victorcano/n8n-nodes-clickhouse.clickhouse",
       "typeVersion": 1,
-      "position": [640, 300],
+      "position": [
+        660,
+        300
+      ],
       "credentials": {
         "ClickHouseApi": {
           "id": "1",
@@ -51,14 +76,14 @@
       "main": [
         [
           {
-            "node": "Code",
+            "node": "Set",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code": {
+    "Set": {
       "main": [
         [
           {

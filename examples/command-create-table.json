@@ -13,7 +13,7 @@
       "parameters": {
         "resource": "command",
         "operation": "executeCommand",
-        "command": "CREATE TABLE IF NOT EXISTS events (id UInt64, name String, event_date Date) ENGINE = MergeTree() ORDER BY id",
+        "command": "CREATE TABLE IF NOT EXISTS events (id UInt64, event String, created_at DateTime) ENGINE = MergeTree() ORDER BY id",
         "databaseOverride": "test",
         "timeoutMs": 60000,
         "compress": true
