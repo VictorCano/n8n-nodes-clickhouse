@@ -38,7 +38,7 @@ async function httpsRequest(options) {
 
 test(
 	'https integration with tlsIgnoreSsl',
-	{ skip: !dockerAvailable() },
+	{ skip: !dockerAvailable(), timeout: 60000 },
 	async (t) => {
 		const { credentials, cleanup } = await startClickHouseTlsContainer({ containerName });
 		t.after(cleanup);

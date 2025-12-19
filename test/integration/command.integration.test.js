@@ -7,7 +7,7 @@ const containerName = `clickhouse-command-${Date.now()}`;
 
 test(
 	'command integration',
-	{ skip: !dockerAvailable() },
+	{ skip: !dockerAvailable(), timeout: 60000 },
 	async (t) => {
 		const { credentials, cleanup } = await startClickHouseContainer({ containerName });
 		t.after(cleanup);
