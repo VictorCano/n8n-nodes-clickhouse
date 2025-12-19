@@ -12,6 +12,10 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            if (process.env.ACT === 'true') {
+              core.info('Skipping label check on act');
+              return;
+            }
             const labels = (context.payload.pull_request?.labels ?? []).map((label) => String(label.name).toLowerCase());
             const allowed = ['major', 'minor', 'patch'];
             const found = allowed.filter((label) => labels.includes(label));

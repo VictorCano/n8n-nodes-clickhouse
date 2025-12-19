@@ -1,5 +1,5 @@
 {
-  "name": "ClickHouse - Insert Rows (from items)",
+  "name": "ClickHouse - Insert Rows (from items, Dev)",
   "nodes": [
     {
       "parameters": {},
@@ -8,7 +8,7 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        200,
+        240,
         300
       ]
     },
@@ -33,13 +33,13 @@
           ]
         }
       },
-      "id": "2",
+      "id": "3",
       "name": "Set",
       "type": "n8n-nodes-base.set",
       "typeVersion": 2,
       "position": [
-        420,
-        300
+        240,
+        520
       ]
     },
     {
@@ -55,17 +55,16 @@
         "timeoutMs": 60000,
         "compress": true
       },
-      "id": "3",
+      "id": "2",
       "name": "ClickHouse",
-      "type": "@victorcano/n8n-nodes-clickhouse.clickhouse",
+      "type": "CUSTOM.clickhouse",
       "typeVersion": 1,
       "position": [
-        660,
-        300
+        460,
+        520
       ],
       "credentials": {
         "ClickHouseApi": {
-          "id": "1",
           "name": "ClickHouse Local"
         }
       }
