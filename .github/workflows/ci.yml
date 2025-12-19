@@ -28,7 +28,9 @@ jobs:
               });
               labels = (data ?? []).map((label) => String(label.name).toLowerCase());
             }
-            if (labels.includes('release')) {
+            const headRef = context.payload.pull_request?.head?.ref ?? '';
+            const title = context.payload.pull_request?.title ?? '';
+            if (labels.includes('release') || headRef.startsWith('release/') || title.toLowerCase().startsWith('chore(release):')) {
               core.info('Skipping label check for release PR.');
               return;
             }

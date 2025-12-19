@@ -147,7 +147,7 @@ jobs:
 
       - name: Ensure release label exists
         run: |
-          gh label create release --color "0e8a16" --description "Automated release PR" || true
+          echo "Release label is expected to exist."
 
       - name: Open release PR
         id: pr
