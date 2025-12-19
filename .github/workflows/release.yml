@@ -94,23 +94,7 @@ jobs:
           echo "Package: ${PACKAGE_NAME}"
 
           if npm view "${PACKAGE_NAME}" --json > /tmp/npm-package.json 2>/dev/null; then
-            node - <<'NODE'
-            const fs = require('fs');
-            const data = JSON.parse(fs.readFileSync('/tmp/npm-package.json', 'utf8'));
-            const user = process.env.NPM_USER;
-            const maintainers = (data.maintainers || [])
-              .map((entry) => (typeof entry === 'string' ? entry : entry.name))
-              .filter(Boolean);
-
-            const hasAccess = maintainers.some((entry) => entry === user || entry.startsWith(`${user} `));
-            if (!hasAccess) {
-              console.error(`NPM user "${user}" is not a maintainer for ${data.name}.`);
-              console.error('Add this user as a collaborator on npm or change the package name.');
-              process.exit(1);
-            }
-
-            console.log(`NPM user "${user}" has publish access for ${data.name}.`);
-            NODE
+            node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('/tmp/npm-package.json','utf8')); const user=process.env.NPM_USER; const maintainers=(data.maintainers||[]).map((entry)=>typeof entry==='string'?entry:entry.name).filter(Boolean); const hasAccess=maintainers.some((entry)=>entry===user||entry.startsWith(user+' ')); if(!hasAccess){console.error('NPM user \"'+user+'\" is not a maintainer for '+data.name+'.'); console.error('Add this user as a collaborator on npm or change the package name.'); process.exit(1);} console.log('NPM user \"'+user+'\" has publish access for '+data.name+'.');"
           else
             echo "Package not found on npm; proceeding with first publish."
           fi
