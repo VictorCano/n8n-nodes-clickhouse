@@ -25,7 +25,7 @@
         "lint": "n8n-node lint",
         "lint:fix": "n8n-node lint --fix",
         "test:unit": "npm run build && node --test test/*.test.js",
-        "test:integration": "node --test test/integration/*.test.js",
+        "test:integration": "node --test --test-concurrency=1 test/integration/*.test.js",
         "test": "npm run test:unit && npm run test:integration",
         "prepare": "husky install",
         "release": "n8n-node release",

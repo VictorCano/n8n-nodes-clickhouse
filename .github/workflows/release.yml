@@ -6,12 +6,16 @@ on:
       - main
 
 jobs:
-  release:
+  plan-release:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: read
+      issues: write
+      pull-requests: write
+    outputs:
+      bump: ${{ steps.bump.outputs.bump }}
+      is_release: ${{ steps.bump.outputs.is_release }}
 
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +67,7 @@ jobs:
             }
 
             const normalized = labels.map((label) => String(label).toLowerCase());
+            const isRelease = normalized.includes('release');
             let bump = 'patch';
 
             if (normalized.includes('major')) {
@@ -81,6 +86,7 @@ jobs:
 
             core.info(`Release type: ${bump}`);
             core.setOutput('bump', bump);
+            core.setOutput('is_release', isRelease ? 'true' : 'false');
 
       - name: Verify npm access
         env:
@@ -99,15 +105,120 @@ jobs:
             echo "Package not found on npm; proceeding with first publish."
           fi
 
+  prepare-release-pr:
+    needs: plan-release
+    if: needs.plan-release.outputs.is_release != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Run release
+      - name: Prepare release commit
         env:
-          RELEASE_TYPE: ${{ steps.bump.outputs.bump }}
+          RELEASE_TYPE: ${{ needs.plan-release.outputs.bump }}
+        run: |
+          set -euo pipefail
+          NEXT_VERSION="$(npm version "${RELEASE_TYPE}" --no-git-tag-version)"
+          NEXT_VERSION="${NEXT_VERSION#v}"
+          npx auto-changelog -p
+          git checkout -b "release/v${NEXT_VERSION}"
+          git add package.json package-lock.json CHANGELOG.md
+          git commit -m "chore(release): v${NEXT_VERSION} [skip ci]"
+          git push -u origin "release/v${NEXT_VERSION}"
+          echo "next_version=${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure release label exists
+        run: |
+          gh label create release --color "0e8a16" --description "Automated release PR" || true
+
+      - name: Open release PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          NEXT_VERSION="$(node -p "require('./package.json').version")"
+          PR_URL=$(gh pr create --title "chore(release): v${NEXT_VERSION}" --body "Automated release PR for v${NEXT_VERSION}." --base main --head "release/v${NEXT_VERSION}" --label "release" || gh pr view "release/v${NEXT_VERSION}" --json url -q .url)
+          echo "pr_url=${PR_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh pr merge --auto --merge "${{ steps.pr.outputs.pr_url }}"
+
+  publish-release:
+    needs: plan-release
+    if: needs.plan-release.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and test
+        run: |
+          npm run lint
+          npm run build
+          npm run test
+
+      - name: Publish to npm
+        env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run release
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "${PACKAGE_NAME}@${VERSION}" --json > /dev/null 2>&1; then
+            echo "${PACKAGE_NAME}@${VERSION} already published."
+            exit 0
+          fi
+          npm publish
+
+      - name: Tag and release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          if git rev-parse "${VERSION}" >/dev/null 2>&1; then
+            echo "Tag ${VERSION} already exists."
+          else
+            git tag "${VERSION}"
+            git push origin "${VERSION}"
+          fi
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            echo "GitHub release ${VERSION} already exists."
+          else
+            gh release create "${VERSION}" --generate-notes
+          fi
