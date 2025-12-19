@@ -1,6 +1,6 @@
 {
     "name": "@victorcano/n8n-nodes-clickhouse",
-    "version": "0.0.2",
+    "version": "0.1.0",
     "description": "ClickHouse community node for n8n",
     "license": "MIT",
     "homepage": "",
