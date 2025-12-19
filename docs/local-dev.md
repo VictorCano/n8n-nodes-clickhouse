@@ -51,3 +51,19 @@ If you do not want watch mode, run `npm run build` after changes and restart the
 - **Password:** `clickhouse`
 - **Default Database:** `test`
 - **Ignore SSL Issues:** `true`
+
+## E2E workflow tests (local n8n)
+
+The E2E test uses your local docker-compose n8n instance by default (`http://localhost:5678`).
+Create an API key in n8n (**Settings → n8n API**) and store it in a local `.env.e2e` file:
+
+```sh
+N8N_E2E_URL=http://localhost:5678
+N8N_E2E_API_KEY=your_api_key_here
+```
+
+Then run:
+
+```sh
+node --test test/e2e/workflows.e2e.test.js
+```

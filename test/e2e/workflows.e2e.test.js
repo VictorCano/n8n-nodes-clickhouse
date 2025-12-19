@@ -1,11 +1,30 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs/promises');
+const fs = require('node:fs');
+const fsp = require('node:fs/promises');
 const path = require('node:path');
 
-const baseUrl = process.env.N8N_E2E_URL;
-const apiKey = process.env.N8N_E2E_API_KEY;
-const shouldSkip = !baseUrl || !apiKey;
+function loadEnvFile(filePath) {
+	if (!fs.existsSync(filePath)) {
+		return {};
+	}
+	const content = fs.readFileSync(filePath, 'utf8');
+	const env = {};
+	for (const line of content.split('\n')) {
+		const trimmed = line.trim();
+		if (!trimmed || trimmed.startsWith('#')) continue;
+		const [key, ...rest] = trimmed.split('=');
+		if (!key) continue;
+		env[key] = rest.join('=').trim();
+	}
+	return env;
+}
+
+const envFile = path.join(process.cwd(), '.env.e2e');
+const fileEnv = loadEnvFile(envFile);
+const baseUrl = process.env.N8N_E2E_URL || fileEnv.N8N_E2E_URL || 'http://localhost:5678';
+const apiKey = process.env.N8N_E2E_API_KEY || fileEnv.N8N_E2E_API_KEY;
+const shouldSkip = !apiKey;
 
 const headers = {
 	'Content-Type': 'application/json',
@@ -65,11 +84,11 @@ test(
 	{ skip: shouldSkip },
 	async (t) => {
 		const examplesDir = path.join(process.cwd(), 'examples');
-		const entries = await fs.readdir(examplesDir);
-		const exampleFiles = entries.filter((file) => file.endsWith('.json'));
+	const entries = await fsp.readdir(examplesDir);
+	const exampleFiles = entries.filter((file) => file.endsWith('.json'));
 
 		for (const file of exampleFiles) {
-			const content = await fs.readFile(path.join(examplesDir, file), 'utf8');
+			const content = await fsp.readFile(path.join(examplesDir, file), 'utf8');
 			const workflow = JSON.parse(content);
 			const id = await createWorkflow(workflow);
 			t.after(() => deleteWorkflow(id));
