@@ -1,2 +1,4 @@
 dev/
 .history/
+node_modules/
+.code/

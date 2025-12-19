@@ -2,12 +2,9 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -26,3 +23,12 @@ jobs:
 
       - name: Run build
         run: 'npm run build'
+
+      - name: Run unit tests
+        run: 'npm run test:unit'
+
+      - name: Run integration tests
+        run: 'npm run test:integration'
+
+      - name: Scan community package
+        run: 'npx @n8n/scan-community-package n8n-nodes-clickhouse'
