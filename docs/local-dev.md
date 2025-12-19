@@ -18,7 +18,7 @@ Open `http://localhost:5678` in your browser.
 
 ## Develop with live code
 
-The docker-compose setup mounts this repo into the n8n container as a custom extension so updates to `dist/` are picked up automatically.
+The docker-compose setup mounts this repo into the n8n community nodes folder so updates to `dist/` are picked up automatically.
 
 ```sh
 npm install

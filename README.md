@@ -29,7 +29,7 @@ Install from the n8n UI:
 For alternative installation methods, see the
 [n8n community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/).
 
-For local development with the provided docker-compose, the repo is mounted into the n8n container as a custom extension.
+For local development with the provided docker-compose, the repo is mounted into the n8n community nodes folder.
 Run `npm run build --watch` while n8n is running so changes in `dist/` are picked up automatically.
 
 ## n8n Cloud
