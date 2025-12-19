@@ -108,7 +108,7 @@ DESCRIBE TABLE test.events
 
 For **Execute Query**:
 
-- **Limit**: default is 50, applied by wrapping your SQL in `SELECT * FROM (<sql>) LIMIT <limit>`.
+- **Limit**: optional. Enable **Use Limit** to wrap your SQL in `SELECT * FROM (<sql>) LIMIT <limit>`.
 - **Pagination**: when enabled, the node loops with `OFFSET` and aggregates results.
 - **Output Mode**:
   - **Single item (Rows Array)**: one item with `{ rows, meta, statistics, summary }`.

@@ -170,6 +170,19 @@ export class Clickhouse implements INodeType {
 				},
 			},
 			{
+				displayName: 'Use Limit',
+				name: 'limitEnabled',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to limit the number of returned rows',
+				displayOptions: {
+					show: {
+						resource: ['query'],
+						operation: ['executeQuery'],
+					},
+				},
+			},
+			{
 				displayName: 'Limit',
 				name: 'limit',
 				type: 'number',
@@ -182,6 +195,7 @@ export class Clickhouse implements INodeType {
 					show: {
 						resource: ['query'],
 						operation: ['executeQuery'],
+						limitEnabled: [true],
 					},
 				},
 			},
@@ -498,6 +512,7 @@ export class Clickhouse implements INodeType {
 
 			if (resource === 'query' && operation === 'executeQuery') {
 				const sql = this.getNodeParameter('query', itemIndex) as string;
+				const limitEnabled = this.getNodeParameter('limitEnabled', itemIndex) as boolean;
 				const limit = this.getNodeParameter('limit', itemIndex) as number;
 				const paginate = this.getNodeParameter('paginate', itemIndex) as boolean;
 				const outputMode = this.getNodeParameter('outputMode', itemIndex) as string;
@@ -511,6 +526,7 @@ export class Clickhouse implements INodeType {
 					httpRequest,
 					credentials,
 					sql,
+					limitEnabled,
 					limit,
 					paginate,
 					databaseOverride,
@@ -593,6 +609,7 @@ export class Clickhouse implements INodeType {
 type QueryExecutionOptions = {
 	credentials: ClickHouseCredentials;
 	sql: string;
+	limitEnabled: boolean;
 	limit: number;
 	paginate: boolean;
 	databaseOverride?: string;
@@ -611,9 +628,14 @@ type QueryExecutionResult = {
 type HttpRequestFn = IExecuteFunctions['helpers']['httpRequest'];
 
 async function executeQuery(options: QueryExecutionOptions): Promise<QueryExecutionResult> {
-	const { credentials, sql, limit, paginate, databaseOverride, timeoutMs, compress, httpRequest } = options;
-	const safeLimit = Math.max(0, Math.floor(limit));
-	const shouldPaginate = paginate && safeLimit > 0;
+const { credentials, sql, limit, limitEnabled, paginate, databaseOverride, timeoutMs, compress, httpRequest } = options;
+	const normalizedLimit = Number.isFinite(limit) ? Number(limit) : 0;
+	const limitApplied = Boolean(limitEnabled);
+	const safeLimit = limitApplied ? Math.max(1, Math.floor(normalizedLimit)) : 0;
+	if (paginate && !limitApplied) {
+		throw new ApplicationError('Limit must be greater than 0 when pagination is enabled.');
+	}
+	const shouldPaginate = paginate && limitApplied;
 
 	const rows: IDataObject[] = [];
 	let meta: IDataObject[] = [];
@@ -622,7 +644,7 @@ async function executeQuery(options: QueryExecutionOptions): Promise<QueryExecut
 
 	while (true) {
 		const offset = shouldPaginate ? pageCount * safeLimit : 0;
-		const pagedSql = buildPaginatedSql(sql, safeLimit, offset);
+		const pagedSql = limitApplied ? buildPaginatedSql(sql, safeLimit, offset) : sql;
 		const response = await clickhouseRequest({
 			httpRequest,
 			credentials,
@@ -650,7 +672,7 @@ async function executeQuery(options: QueryExecutionOptions): Promise<QueryExecut
 
 	const summary: IDataObject = {
 		rowCount: rows.length,
-		limit: safeLimit,
+		limit: limitApplied ? safeLimit : null,
 		pages: pageCount,
 		paginated: shouldPaginate,
 	};
