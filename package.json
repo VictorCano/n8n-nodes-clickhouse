@@ -1,6 +1,6 @@
 {
-    "name": "n8n-nodes-clickhouse",
-    "version": "0.1.0",
+    "name": "@victorcano/n8n-nodes-clickhouse",
+    "version": "0.0.0",
 	"description": "ClickHouse community node for n8n",
     "license": "MIT",
     "homepage": "",
@@ -14,6 +14,9 @@
     "repository": {
         "type": "git",
 		"url": "https://github.com/VictorCano/n8n-nodes-clickhouse.git"
+    },
+    "publishConfig": {
+        "access": "public"
     },
 	"scripts": {
 		"build": "n8n-node build",

@@ -1,0 +1,9 @@
+- name: Major
+  color: d73a4a
+  description: Trigger major version bump (breaking changes)
+- name: Minor
+  color: 0075ca
+  description: Trigger minor version bump (new features)
+- name: Patch
+  color: cfd3d7
+  description: Trigger patch version bump (fixes and chores)

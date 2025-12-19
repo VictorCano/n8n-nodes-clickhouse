@@ -1,4 +1,13 @@
 dev/
 .history/
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+.eslintcache
+.cache/
+.DS_Store
 node_modules/
 .code/
