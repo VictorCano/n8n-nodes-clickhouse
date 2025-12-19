@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
+const { spawnSync, execSync } = require('node:child_process');
 
 function loadEnvFile(filePath) {
 	if (!fs.existsSync(filePath)) {
@@ -24,6 +25,7 @@ const envFile = path.join(process.cwd(), '.env.e2e');
 const fileEnv = loadEnvFile(envFile);
 const baseUrl = process.env.N8N_E2E_URL || fileEnv.N8N_E2E_URL || 'http://localhost:5678';
 const apiKey = process.env.N8N_E2E_API_KEY || fileEnv.N8N_E2E_API_KEY;
+const containerName = process.env.N8N_E2E_CONTAINER || fileEnv.N8N_E2E_CONTAINER || 'n8n-local';
 const shouldSkip = !apiKey;
 
 const headers = {
@@ -46,6 +48,48 @@ async function apiFetch(endpoint, options = {}) {
 	return { res, data, text };
 }
 
+function dockerExec(command, { allowFailure = false } = {}) {
+	const result = spawnSync(
+		'docker',
+		['exec', containerName, 'sh', '-lc', command],
+		{ encoding: 'utf8' },
+	);
+	if (!allowFailure && result.status !== 0) {
+		const error = new Error(`docker exec failed: ${result.stderr || result.stdout}`);
+		error.code = result.status;
+		throw error;
+	}
+	return result;
+}
+
+function containerRunning() {
+	try {
+		const id = execSync(
+			`docker ps --filter "name=${containerName}" --format "{{.ID}}"`,
+			{ encoding: 'utf8' },
+		).trim();
+		return Boolean(id);
+	} catch {
+		return false;
+	}
+}
+
+async function getClickHouseCredential() {
+	const tempFile = `/tmp/creds-${Date.now()}.json`;
+	dockerExec(`n8n export:credentials --all --decrypted --output=${tempFile}`);
+	const rawResult = dockerExec(`cat ${tempFile}`);
+	dockerExec(`rm -f ${tempFile}`);
+	const list = JSON.parse(rawResult.stdout.trim());
+	const candidates = Array.isArray(list) ? list : list.data || [];
+	const match = candidates.find(
+		(item) => item.name === 'ClickHouse Local' || item.type === 'ClickHouseApi',
+	);
+	if (!match) {
+		throw new Error('No ClickHouseApi credential found in n8n');
+	}
+	return { id: match.id, name: match.name };
+}
+
 async function createWorkflow(definition) {
 	const payload = {
 		name: definition.name,
@@ -65,35 +109,54 @@ async function deleteWorkflow(id) {
 	await apiFetch(`/api/v1/workflows/${id}`, { method: 'DELETE' });
 }
 
-async function runWorkflow(id) {
-	const endpoints = [
-		`/api/v1/workflows/${id}/run`,
-		`/api/v1/workflows/${id}/execute`,
-		`/rest/workflows/${id}/run`,
-	];
-
-	for (const endpoint of endpoints) {
-		const result = await apiFetch(endpoint, { method: 'POST', body: '{}' });
-		if (result.res.ok) return result;
+function extractJson(output) {
+	const start = output.indexOf('{');
+	if (start === -1) {
+		throw new Error('No JSON payload found in output');
 	}
-	throw new Error('No workflow run endpoint succeeded');
+	const jsonText = output.slice(start).trim();
+	return JSON.parse(jsonText);
+}
+
+function runWorkflow(id) {
+	const result = dockerExec(`n8n execute --id=${id} --rawOutput`, { allowFailure: true });
+	const combined = `${result.stdout || ''}\n${result.stderr || ''}`.trim();
+	if (result.status !== 0) {
+		throw new Error(`Workflow execution failed: ${combined}`);
+	}
+	if (!combined) {
+		throw new Error('Workflow execution returned empty output');
+	}
+	return extractJson(combined);
 }
 
 test(
 	'e2e: import and run example workflows',
-	{ skip: shouldSkip },
+	{ skip: shouldSkip || !containerRunning() },
 	async (t) => {
+		const credential = await getClickHouseCredential();
 		const examplesDir = path.join(process.cwd(), 'examples');
-	const entries = await fsp.readdir(examplesDir);
-	const exampleFiles = entries.filter((file) => file.endsWith('.json'));
+		const entries = await fsp.readdir(examplesDir);
+		const exampleFiles = entries.filter((file) => file.endsWith('.json'));
 
 		for (const file of exampleFiles) {
 			const content = await fsp.readFile(path.join(examplesDir, file), 'utf8');
 			const workflow = JSON.parse(content);
+			for (const node of workflow.nodes || []) {
+				if (node.credentials && node.credentials.ClickHouseApi) {
+					node.credentials.ClickHouseApi = credential;
+				}
+			}
 			const id = await createWorkflow(workflow);
 			t.after(() => deleteWorkflow(id));
-			const runResult = await runWorkflow(id);
-			assert.ok(runResult.text.length > 0);
+			const runResult = runWorkflow(id);
+			const resultData =
+				runResult?.data?.resultData ||
+				runResult?.resultData ||
+				runResult?.executedData?.resultData;
+			assert.ok(resultData, 'Missing result data');
+			assert.ok(!resultData.error, 'Workflow execution reported an error');
+			assert.ok(resultData.runData, 'Missing run data');
 		}
 	},
 );

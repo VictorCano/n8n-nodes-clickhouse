@@ -60,9 +60,10 @@ Create an API key in n8n (**Settings → n8n API**) and store it in a local `.en
 ```sh
 N8N_E2E_URL=http://localhost:5678
 N8N_E2E_API_KEY=your_api_key_here
+N8N_E2E_CONTAINER=n8n-local
 ```
 
-Then run:
+Ensure the `n8n-local` container is running, then run:
 
 ```sh
 node --test test/e2e/workflows.e2e.test.js

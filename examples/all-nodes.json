@@ -99,6 +99,7 @@
         "resource": "query",
         "operation": "executeQuery",
         "query": "SELECT * FROM events ORDER BY id DESC",
+        "limitEnabled": false,
         "limit": 100,
         "paginate": false,
         "outputMode": "single",

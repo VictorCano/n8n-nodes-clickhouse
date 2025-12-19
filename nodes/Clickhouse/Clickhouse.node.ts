@@ -513,7 +513,7 @@ export class Clickhouse implements INodeType {
 			if (resource === 'query' && operation === 'executeQuery') {
 				const sql = this.getNodeParameter('query', itemIndex) as string;
 				const limitEnabled = this.getNodeParameter('limitEnabled', itemIndex) as boolean;
-				const limit = this.getNodeParameter('limit', itemIndex) as number;
+				const limit = this.getNodeParameter('limit', itemIndex, 50) as number;
 				const paginate = this.getNodeParameter('paginate', itemIndex) as boolean;
 				const outputMode = this.getNodeParameter('outputMode', itemIndex) as string;
 				const databaseOverride = normalizeOptionalString(

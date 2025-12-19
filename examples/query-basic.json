@@ -14,6 +14,7 @@
         "resource": "query",
         "operation": "executeQuery",
         "query": "SELECT 1 AS value",
+        "limitEnabled": false,
         "limit": 50,
         "paginate": false,
         "outputMode": "single",
