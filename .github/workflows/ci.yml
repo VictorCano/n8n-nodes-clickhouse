@@ -17,6 +17,11 @@ jobs:
               return;
             }
             const labels = (context.payload.pull_request?.labels ?? []).map((label) => String(label.name).toLowerCase());
+            if (labels.includes('release')) {
+              core.info('Skipping label check for release PR.');
+              return;
+            }
+
             const allowed = ['major', 'minor', 'patch'];
             const found = allowed.filter((label) => labels.includes(label));
 
