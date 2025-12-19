@@ -3,7 +3,7 @@ import type { ICredentialTestRequest, ICredentialType, INodeProperties, Icon } f
 export class ClickHouseApi implements ICredentialType {
 	name = 'ClickHouseApi';
 	displayName = 'ClickHouse API';
-	icon: Icon = { light: 'file:../example.svg', dark: 'file:../example.dark.svg' };
+	icon: Icon = { light: 'file:../clickhouse.svg', dark: 'file:../clickhouse.dark.svg' };
 	properties: INodeProperties[] = [
 		{
 			displayName: 'Protocol',
