@@ -9,6 +9,17 @@ test('buildPaginatedSql wraps query with limit and offset', () => {
 	assert.equal(wrapped, 'SELECT * FROM (SELECT id FROM logs) LIMIT 100 OFFSET 200');
 });
 
+test('buildPaginatedSql trims trailing semicolons', () => {
+	const sql = 'SELECT id FROM logs;;';
+	const wrapped = buildPaginatedSql(sql, 10, 0);
+	assert.equal(wrapped, 'SELECT * FROM (SELECT id FROM logs) LIMIT 10');
+});
+
+test('buildPaginatedSql handles offset 0 without OFFSET clause', () => {
+	const wrapped = buildPaginatedSql('SELECT 1', 5, 0);
+	assert.equal(wrapped, 'SELECT * FROM (SELECT 1) LIMIT 5');
+});
+
 test('shapeQueryOutput returns consistent structure', () => {
 	const output = shapeQueryOutput({
 		rows: [{ id: 1 }],

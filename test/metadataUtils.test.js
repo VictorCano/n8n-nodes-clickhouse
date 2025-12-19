@@ -21,3 +21,10 @@ test('parseMetadataJson handles missing fields', () => {
 	assert.deepEqual(result.meta, []);
 	assert.deepEqual(result.statistics, {});
 });
+
+test('parseMetadataJson throws on invalid JSON', () => {
+	assert.throws(
+		() => parseMetadataJson('{invalid'),
+		(error) => error instanceof SyntaxError,
+	);
+});
