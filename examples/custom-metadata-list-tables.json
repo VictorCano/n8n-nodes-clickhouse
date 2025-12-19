@@ -1,0 +1,52 @@
+{
+  "name": "ClickHouse (Custom) - List Tables",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "resource": "metadata",
+        "operation": "listTables",
+        "databaseOverride": "test",
+        "timeoutMs": 60000,
+        "compress": true
+      },
+      "id": "2",
+      "name": "ClickHouse",
+      "type": "CUSTOM.clickhouse",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "ClickHouseApi": {
+          "id": "1",
+          "name": "ClickHouse Local"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "ClickHouse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "00000000-0000-0000-0000-000000000000",
+  "meta": {
+    "instanceId": "local"
+  }
+}

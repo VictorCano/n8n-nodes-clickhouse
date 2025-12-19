@@ -130,6 +130,13 @@ Workflow exports are included in the `/examples` folder:
 - `examples/insert-from-items.json`
 - `examples/metadata-list-tables.json`
 
+If your instance loads the node as `CUSTOM.clickhouse` (custom extensions/dev mode), use the matching custom exports:
+
+- `examples/custom-query-basic.json`
+- `examples/custom-command-create-table.json`
+- `examples/custom-insert-from-items.json`
+- `examples/custom-metadata-list-tables.json`
+
 ## Resources
 
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
