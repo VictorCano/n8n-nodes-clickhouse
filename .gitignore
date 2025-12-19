@@ -3,7 +3,6 @@ dev/
 dist/
 coverage/
 *.log
-docker/data/
 .env
 .env.*
 !.env.example

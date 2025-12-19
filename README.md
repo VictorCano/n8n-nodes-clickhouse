@@ -108,7 +108,7 @@ DESCRIBE TABLE test.events
 
 For **Execute Query**:
 
-- **Limit**: default is 50, applied by wrapping your SQL in `SELECT * FROM (<sql>) LIMIT <limit>`.
+- **Limit**: optional. Enable **Use Limit** to wrap your SQL in `SELECT * FROM (<sql>) LIMIT <limit>`.
 - **Pagination**: when enabled, the node loops with `OFFSET` and aggregates results.
 - **Output Mode**:
   - **Single item (Rows Array)**: one item with `{ rows, meta, statistics, summary }`.
@@ -117,7 +117,6 @@ For **Execute Query**:
 ## TLS Notes (Self-Signed Certificates)
 
 If you use self-signed certificates (local TLS or custom ClickHouse TLS), enable **Ignore SSL Issues** in credentials.
-For stricter setups, you can also paste **CA / Client Cert / Client Key** PEM values into the credential fields.
 
 ## Known Limitations
 

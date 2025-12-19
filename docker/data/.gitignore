@@ -1,2 +1,8 @@
 *
 !.gitignore
+!n8n/
+!n8n/.gitkeep
+!clickhouse/
+!clickhouse/.gitkeep
+!clickhouse-tls/
+!clickhouse-tls/.gitkeep
