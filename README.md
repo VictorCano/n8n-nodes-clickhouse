@@ -29,6 +29,9 @@ Install from the n8n UI:
 For alternative installation methods, see the
 [n8n community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/).
 
+For local development with the provided docker-compose, the repo is mounted into the n8n container as a custom extension.
+Run `npm run build --watch` while n8n is running so changes in `dist/` are picked up automatically.
+
 ## n8n Cloud
 
 n8n Cloud only allows installation of **verified** community nodes from the Cloud panel. If this node is not listed
@@ -44,7 +47,7 @@ Create a **ClickHouse API** credential and fill in the following fields.
 - **Host:** `localhost` (or `clickhouse` when using the provided docker-compose)
 - **Port:** `8123`
 - **Username:** `default`
-- **Password:** *(empty, unless set)*
+- **Password:** `clickhouse` (when using the provided docker-compose)
 - **Default Database:** `test` (optional)
 - **Ignore SSL Issues:** `false`
 

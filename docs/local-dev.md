@@ -16,6 +16,17 @@ This will start:
 
 Open `http://localhost:5678` in your browser.
 
+## Develop with live code
+
+The docker-compose setup mounts this repo into the n8n container as a custom extension so updates to `dist/` are picked up automatically.
+
+```sh
+npm install
+npm run build --watch
+```
+
+If you do not want watch mode, run `npm run build` after changes and restart the `n8n` container.
+
 ## Example credentials
 
 ### ClickHouse (HTTP)
@@ -24,7 +35,7 @@ Open `http://localhost:5678` in your browser.
 - **Host:** `clickhouse`
 - **Port:** `8123`
 - **Username:** `default`
-- **Password:** *(empty)*
+- **Password:** `clickhouse`
 - **Default Database:** `test`
 - **Ignore SSL Issues:** `false`
 
@@ -34,6 +45,6 @@ Open `http://localhost:5678` in your browser.
 - **Host:** `clickhouse_tls`
 - **Port:** `8443`
 - **Username:** `default`
-- **Password:** *(empty)*
+- **Password:** `clickhouse`
 - **Default Database:** `test`
 - **Ignore SSL Issues:** `true`

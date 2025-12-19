@@ -1,0 +1,10 @@
+<clickhouse>
+  <users>
+    <default>
+      <password>clickhouse</password>
+      <networks>
+        <ip>::/0</ip>
+      </networks>
+    </default>
+  </users>
+</clickhouse>
