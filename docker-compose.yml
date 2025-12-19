@@ -11,7 +11,6 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./docker/clickhouse/init:/docker-entrypoint-initdb.d:ro
-      - ./docker/clickhouse/users/default-user.xml:/etc/clickhouse-server/users.d/default-user.xml:ro
 
   clickhouse_tls:
     image: clickhouse/clickhouse-server:latest
@@ -28,7 +27,6 @@ services:
       - ./docker/clickhouse/tls/https.xml:/etc/clickhouse-server/config.d/https.xml:ro
       - ./docker/clickhouse/tls/server.crt:/etc/clickhouse-server/certs/server.crt:ro
       - ./docker/clickhouse/tls/server.key:/etc/clickhouse-server/certs/server.key:ro
-      - ./docker/clickhouse/users/default-user.xml:/etc/clickhouse-server/users.d/default-user.xml:ro
 
   n8n:
     image: n8nio/n8n:latest
