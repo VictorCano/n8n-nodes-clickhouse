@@ -1,4 +1,5 @@
 const { execSync } = require('node:child_process');
+const http = require('node:http');
 const https = require('node:https');
 const path = require('node:path');
 
@@ -16,33 +17,33 @@ function dockerAvailable() {
 async function waitForPing(url, authHeader, insecure = false) {
 	const timeoutMs = 30_000;
 	const start = Date.now();
+	const isHttps = url.startsWith('https://');
+	const client = isHttps ? https : http;
 	while (Date.now() - start < timeoutMs) {
 		try {
-			if (url.startsWith('https://')) {
-				await new Promise((resolve, reject) => {
-					const req = https.request(
-						url,
-						{
-							rejectUnauthorized: !insecure,
-							headers: authHeader ? { Authorization: authHeader } : undefined,
-						},
-						(res) => {
-							if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-								resolve();
-							} else {
-								reject(new Error(`Ping failed with status ${res.statusCode}`));
-							}
-						},
-					);
-					req.on('error', reject);
-					req.end();
+			await new Promise((resolve, reject) => {
+				const req = client.request(
+					url,
+					{
+						...(isHttps ? { rejectUnauthorized: !insecure } : {}),
+						headers: authHeader ? { Authorization: authHeader } : undefined,
+					},
+					(res) => {
+						res.resume();
+						if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+							resolve();
+						} else {
+							reject(new Error(`Ping failed with status ${res.statusCode}`));
+						}
+					},
+				);
+				req.on('error', reject);
+				req.setTimeout(5_000, () => {
+					req.destroy(new Error('Ping timeout'));
 				});
-				return;
-			}
-			const res = await fetch(url, {
-				headers: authHeader ? { Authorization: authHeader } : undefined,
+				req.end();
 			});
-			if (res.ok) return;
+			return;
 		} catch {
 			// ignore until timeout
 		}
