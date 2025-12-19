@@ -2,47 +2,150 @@
 
 This is an n8n community node. It lets you use ClickHouse in your n8n workflows.
 
-ClickHouse is _TODO: add one or two sentences describing the service this node integrates with_.
+ClickHouse is an open-source, column-oriented database designed for high-performance analytics on large datasets.
 
 Note: This project uses AI-assisted development.
 
-[n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/sustainable-use-license/) workflow automation platform.
-
-[Installation](#installation)
-[Operations](#operations)
+[Installation (Self-Hosted)](#installation-self-hosted)
+[n8n Cloud](#n8n-cloud)
 [Credentials](#credentials)
-[Compatibility](#compatibility)
-[Usage](#usage)
+[Operations](#operations)
+[Examples](#examples)
+[Pagination and Output Options](#pagination-and-output-options)
+[TLS Notes (Self-Signed Certificates)](#tls-notes-self-signed-certificates)
+[Known Limitations](#known-limitations)
+[Example Workflows](#example-workflows)
 [Resources](#resources)
-[Version history](#version-history)
+[Release Automation](#release-automation)
 
-## Installation
+## Installation (Self-Hosted)
 
-Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) in the n8n community nodes documentation.
+Install from the n8n UI:
 
-## Operations
+1. Go to **Settings > Community Nodes**.
+2. Select **Install** and enter `n8n-nodes-clickhouse`.
+3. Restart n8n if prompted.
 
-_List the operations supported by your node._
+For alternative installation methods, see the
+[n8n community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/).
+
+## n8n Cloud
+
+n8n Cloud only allows installation of **verified** community nodes from the Cloud panel. If this node is not listed
+there, you cannot install it in n8n Cloud.
 
 ## Credentials
 
-_If users need to authenticate with the app/service, provide details here. You should include prerequisites (such as signing up with the service), available authentication methods, and how to set them up._
+Create a **ClickHouse API** credential and fill in the following fields.
 
-## Compatibility
+### Local ClickHouse (HTTP 8123)
 
-_State the minimum n8n version, as well as which versions you test against. You can also include any known version incompatibility issues._
+- **Protocol:** `http`
+- **Host:** `localhost` (or `clickhouse` when using the provided docker-compose)
+- **Port:** `8123`
+- **Username:** `default`
+- **Password:** *(empty, unless set)*
+- **Default Database:** `test` (optional)
+- **Ignore SSL Issues:** `false`
 
-## Usage
+### ClickHouse Cloud (HTTPS 8443)
 
-_This is an optional section. Use it to help users with any difficult or confusing aspects of the node._
+- **Protocol:** `https`
+- **Host:** your ClickHouse Cloud hostname (for example, `xxxxxx.aws.clickhouse.cloud`)
+- **Port:** `8443`
+- **Username / Password:** from your ClickHouse Cloud service
+- **Default Database:** your target database (optional)
+- **Ignore SSL Issues:** `false`
 
-_By the time users are looking for community nodes, they probably already know n8n basics. But if you expect new users, you can link to the [Try it out](https://docs.n8n.io/try-it-out/) documentation to help them get started._
+## Operations
+
+Resources and operations:
+
+- **Query**: Execute Query
+- **Command**: Execute Command
+- **Insert**: Insert Rows (from input items), Insert Rows (from JSON array field)
+- **Metadata**: List Databases, List Tables, List Columns
+
+## Examples
+
+### Query
+
+```sql
+SELECT * FROM events WHERE event_date >= today() - 7
+```
+
+### Command
+
+```sql
+CREATE TABLE IF NOT EXISTS events (
+  id UInt64,
+  name String,
+  event_date Date
+) ENGINE = MergeTree()
+ORDER BY id
+```
+
+### Insert
+
+Insert rows from input items into `events` with columns `id,name,event_date`.
+
+```sql
+INSERT INTO events (id, name, event_date) FORMAT JSONEachRow
+```
+
+### Metadata
+
+```sql
+SHOW DATABASES
+SHOW TABLES FROM test
+DESCRIBE TABLE test.events
+```
+
+## Pagination and Output Options
+
+For **Execute Query**:
+
+- **Limit**: default is 50, applied by wrapping your SQL in `SELECT * FROM (<sql>) LIMIT <limit>`.
+- **Pagination**: when enabled, the node loops with `OFFSET` and aggregates results.
+- **Output Mode**:
+  - **Single item (Rows Array)**: one item with `{ rows, meta, statistics, summary }`.
+  - **One item per row**: each row becomes its own item.
+
+## TLS Notes (Self-Signed Certificates)
+
+If you use self-signed certificates (local TLS or custom ClickHouse TLS), enable **Ignore SSL Issues** in credentials.
+For stricter setups, you can also paste **CA / Client Cert / Client Key** PEM values into the credential fields.
+
+## Known Limitations
+
+- Single statement only (no multi-statement SQL).
+- HTTP interface only (no native TCP protocol support).
+
+## Example Workflows
+
+Workflow exports are included in the `/examples` folder:
+
+- `examples/query-basic.json`
+- `examples/command-create-table.json`
+- `examples/insert-from-items.json`
+- `examples/metadata-list-tables.json`
 
 ## Resources
 
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
-* _Link to app/service documentation._
+* [ClickHouse HTTP interface](https://clickhouse.com/docs/en/interfaces/http)
 
-## Version history
+## Release Automation
 
-_This is another optional section. If your node has multiple versions, include a short description of available versions and what changed, as well as any compatibility impact._
+Releases are fully automated on merge to `main`. The workflow determines the version bump based on PR labels:
+
+- `Major` → major bump
+- `Minor` → minor bump
+- `Patch` → patch bump
+- No label → patch bump
+
+Required repository secrets:
+
+- `NPM_TOKEN` (npm publish)
+
+The workflow uses `npm run release` (n8n-node release) and creates tags + GitHub releases.
