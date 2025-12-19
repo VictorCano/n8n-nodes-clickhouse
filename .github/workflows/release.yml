@@ -65,6 +65,39 @@ jobs:
             core.info(`Release type: ${bump}`);
             core.setOutput('bump', bump);
 
+      - name: Verify npm access
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME="$(node -p "require('./package.json').name")"
+          NPM_USER="$(npm whoami)"
+          export NPM_USER
+          echo "NPM user: ${NPM_USER}"
+          echo "Package: ${PACKAGE_NAME}"
+
+          if npm view "${PACKAGE_NAME}" --json > /tmp/npm-package.json 2>/dev/null; then
+            node - <<'NODE'
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('/tmp/npm-package.json', 'utf8'));
+            const user = process.env.NPM_USER;
+            const maintainers = (data.maintainers || [])
+              .map((entry) => (typeof entry === 'string' ? entry : entry.name))
+              .filter(Boolean);
+
+            const hasAccess = maintainers.some((entry) => entry === user || entry.startsWith(`${user} `));
+            if (!hasAccess) {
+              console.error(`NPM user "${user}" is not a maintainer for ${data.name}.`);
+              console.error('Add this user as a collaborator on npm or change the package name.');
+              process.exit(1);
+            }
+
+            console.log(`NPM user "${user}" has publish access for ${data.name}.`);
+          NODE
+          else
+            echo "Package not found on npm; proceeding with first publish."
+          fi
+
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
