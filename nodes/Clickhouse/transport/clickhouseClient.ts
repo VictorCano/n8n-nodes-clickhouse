@@ -8,10 +8,6 @@ export type ClickHouseCredentials = {
 	password: string;
 	defaultDatabase?: string;
 	tlsIgnoreSsl: boolean;
-	ca?: string;
-	cert?: string;
-	key?: string;
-	passphrase?: string;
 };
 
 export type ClickHouseRequestOptions = {
@@ -119,15 +115,7 @@ export async function request(options: ClickHouseRequestOptions): Promise<ClickH
 		headers['Content-Encoding'] = 'gzip';
 	}
 
-	const requestOptions: IHttpRequestOptions & {
-		agentOptions?: {
-			rejectUnauthorized?: boolean;
-			ca?: string;
-			cert?: string;
-			key?: string;
-			passphrase?: string;
-		};
-	} = {
+	const requestOptions: IHttpRequestOptions = {
 		method: 'POST',
 		url,
 		body: requestBody,
@@ -141,15 +129,6 @@ export async function request(options: ClickHouseRequestOptions): Promise<ClickH
 
 	if (credentials.protocol === 'https') {
 		requestOptions.skipSslCertificateValidation = credentials.tlsIgnoreSsl;
-		if (credentials.ca || credentials.cert || credentials.key || credentials.passphrase) {
-			requestOptions.agentOptions = {
-				rejectUnauthorized: !credentials.tlsIgnoreSsl,
-				ca: credentials.ca,
-				cert: credentials.cert,
-				key: credentials.key,
-				passphrase: credentials.passphrase,
-			};
-		}
 	}
 
 	const response = httpRequest

@@ -67,69 +67,6 @@ export class ClickHouseApi implements ICredentialType {
 				},
 			},
 		},
-		{
-			displayName: 'CA Certificate (PEM)',
-			name: 'ca',
-			type: 'string',
-			typeOptions: {
-				password: true,
-				rows: 4,
-			},
-			default: '',
-			description: 'CA certificate in PEM format',
-			displayOptions: {
-				show: {
-					protocol: ['https'],
-				},
-			},
-		},
-		{
-			displayName: 'Client Certificate (PEM)',
-			name: 'cert',
-			type: 'string',
-			typeOptions: {
-				password: true,
-				rows: 4,
-			},
-			default: '',
-			description: 'Client certificate in PEM format',
-			displayOptions: {
-				show: {
-					protocol: ['https'],
-				},
-			},
-		},
-		{
-			displayName: 'Client Key (PEM)',
-			name: 'key',
-			type: 'string',
-			typeOptions: {
-				password: true,
-				rows: 4,
-			},
-			default: '',
-			description: 'Client key in PEM format',
-			displayOptions: {
-				show: {
-					protocol: ['https'],
-				},
-			},
-		},
-		{
-			displayName: 'Client Key Passphrase',
-			name: 'passphrase',
-			type: 'string',
-			typeOptions: {
-				password: true,
-			},
-			default: '',
-			description: 'Passphrase for the client key, if needed',
-			displayOptions: {
-				show: {
-					protocol: ['https'],
-				},
-			},
-		},
 	];
 
 	test: ICredentialTestRequest = {
