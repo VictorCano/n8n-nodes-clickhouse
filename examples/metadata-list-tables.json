@@ -19,7 +19,7 @@
       },
       "id": "2",
       "name": "ClickHouse",
-      "type": "n8n-nodes-clickhouse.clickhouse",
+      "type": "@victorcano/n8n-nodes-clickhouse.clickhouse",
       "typeVersion": 1,
       "position": [460, 300],
       "credentials": {

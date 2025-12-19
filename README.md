@@ -23,7 +23,7 @@ Note: This project uses AI-assisted development.
 Install from the n8n UI:
 
 1. Go to **Settings > Community Nodes**.
-2. Select **Install** and enter `n8n-nodes-clickhouse`.
+2. Select **Install** and enter `@victorcano/n8n-nodes-clickhouse`.
 3. Restart n8n if prompted.
 
 For alternative installation methods, see the
@@ -147,5 +147,9 @@ Releases are fully automated on merge to `main`. The workflow determines the ver
 Required repository secrets:
 
 - `NPM_TOKEN` (npm publish)
+
+The npm token user must be a maintainer for the package name (`@victorcano/n8n-nodes-clickhouse`). If the name is already owned on npm, add the user as a collaborator or rename the package before releasing.
+
+Because this is a scoped package, the token must have access to the `@victorcano` scope and the package publishes as public (`publishConfig.access=public`).
 
 The workflow uses `npm run release` (n8n-node release) and creates tags + GitHub releases.

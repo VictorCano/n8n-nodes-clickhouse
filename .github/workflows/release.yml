@@ -32,23 +32,34 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const sha = context.sha;
             const { owner, repo } = context.repo;
-            let labels = [];
+            const shas = new Set([context.sha]);
+            const commits = context.payload.commits ?? [];
+            for (const commit of commits) {
+              if (commit?.id) shas.add(commit.id);
+            }
 
-            try {
-              const { data } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                owner,
-                repo,
-                commit_sha: sha,
-                mediaType: { previews: ['groot'] },
-              });
+            const labels = [];
+            const prNumbers = new Set();
 
-              if (data.length) {
-                labels = data[0].labels.map((label) => label.name);
+            for (const sha of shas) {
+              try {
+                const { data } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner,
+                  repo,
+                  commit_sha: sha,
+                  mediaType: { previews: ['groot'] },
+                });
+
+                for (const pr of data) {
+                  prNumbers.add(pr.number);
+                  for (const label of pr.labels) {
+                    labels.push(label.name);
+                  }
+                }
+              } catch (error) {
+                core.warning(`Failed to load PR labels for ${sha}: ${error.message}`);
               }
-            } catch (error) {
-              core.warning(`Failed to load PR labels: ${error.message}`);
             }
 
             const normalized = labels.map((label) => String(label).toLowerCase());
@@ -60,10 +71,49 @@ jobs:
               bump = 'minor';
             } else if (normalized.includes('patch')) {
               bump = 'patch';
+            } else if (!normalized.length) {
+              core.warning('No PR labels found; defaulting to patch release.');
+            }
+
+            if (prNumbers.size) {
+              core.info(`Associated PR(s): ${Array.from(prNumbers).join(', ')}`);
             }
 
             core.info(`Release type: ${bump}`);
             core.setOutput('bump', bump);
+
+      - name: Verify npm access
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME="$(node -p "require('./package.json').name")"
+          NPM_USER="$(npm whoami)"
+          export NPM_USER
+          echo "NPM user: ${NPM_USER}"
+          echo "Package: ${PACKAGE_NAME}"
+
+          if npm view "${PACKAGE_NAME}" --json > /tmp/npm-package.json 2>/dev/null; then
+            node - <<'NODE'
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('/tmp/npm-package.json', 'utf8'));
+            const user = process.env.NPM_USER;
+            const maintainers = (data.maintainers || [])
+              .map((entry) => (typeof entry === 'string' ? entry : entry.name))
+              .filter(Boolean);
+
+            const hasAccess = maintainers.some((entry) => entry === user || entry.startsWith(`${user} `));
+            if (!hasAccess) {
+              console.error(`NPM user "${user}" is not a maintainer for ${data.name}.`);
+              console.error('Add this user as a collaborator on npm or change the package name.');
+              process.exit(1);
+            }
+
+            console.log(`NPM user "${user}" has publish access for ${data.name}.`);
+            NODE
+          else
+            echo "Package not found on npm; proceeding with first publish."
+          fi
 
       - name: Configure git
         run: |
