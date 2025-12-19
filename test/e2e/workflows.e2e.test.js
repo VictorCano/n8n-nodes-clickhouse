@@ -105,6 +105,12 @@ async function createWorkflow(definition) {
 	return data.id;
 }
 
+async function getWorkflow(id) {
+	const { res, data, text } = await apiFetch(`/api/v1/workflows/${id}`);
+	assert.ok(res.ok, `Failed to fetch workflow: ${res.status} ${text}`);
+	return data;
+}
+
 async function deleteWorkflow(id) {
 	await apiFetch(`/api/v1/workflows/${id}`, { method: 'DELETE' });
 }
@@ -149,6 +155,16 @@ test(
 			}
 			const id = await createWorkflow(workflow);
 			t.after(() => deleteWorkflow(id));
+			const stored = await getWorkflow(id);
+			const storedNodes = stored.nodes || [];
+			const hasClickHouse = storedNodes.some((node) =>
+				String(node.type || '').includes('n8n-nodes-clickhouse') ||
+				String(node.type || '').includes('CUSTOM.clickhouse'),
+			);
+			assert.ok(
+				hasClickHouse,
+				`ClickHouse nodes missing after import (${file}). Make sure dist is built and mounted into n8n-local.`,
+			);
 			const runResult = runWorkflow(id);
 			const resultData =
 				runResult?.data?.resultData ||
