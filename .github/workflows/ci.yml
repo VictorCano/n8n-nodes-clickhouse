@@ -16,7 +16,23 @@ jobs:
               core.info('Skipping label check on act');
               return;
             }
-            const labels = (context.payload.pull_request?.labels ?? []).map((label) => String(label.name).toLowerCase());
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request?.number ?? context.issue.number;
+            let labels = (context.payload.pull_request?.labels ?? []).map((label) => String(label.name).toLowerCase());
+
+            if (!labels.length && prNumber) {
+              const { data } = await github.rest.issues.listLabelsOnIssue({
+                owner,
+                repo,
+                issue_number: prNumber,
+              });
+              labels = (data ?? []).map((label) => String(label.name).toLowerCase());
+            }
+            if (labels.includes('release')) {
+              core.info('Skipping label check for release PR.');
+              return;
+            }
+
             const allowed = ['major', 'minor', 'patch'];
             const found = allowed.filter((label) => labels.includes(label));
 
