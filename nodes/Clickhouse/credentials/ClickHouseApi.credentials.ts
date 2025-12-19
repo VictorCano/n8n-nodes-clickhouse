@@ -135,7 +135,7 @@ export class ClickHouseApi implements ICredentialType {
 	test: ICredentialTestRequest = {
 		request: {
 			method: 'GET',
-			url: '={{$credentials.protocol}}://{{$credentials.host}}:{{$credentials.port}}/ping',
+			url: '={{$credentials.protocol}}://{{$credentials.host}}:{{$credentials.port}}/?query=SELECT%201',
 			auth: {
 				username: '={{$credentials.username}}',
 				password: '={{$credentials.password}}',
