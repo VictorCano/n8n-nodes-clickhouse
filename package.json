@@ -19,7 +19,7 @@
         "access": "public"
     },
     "scripts": {
-        "build": "n8n-node build",
+        "build": "node scripts/build.js",
         "build:watch": "tsc --watch",
         "dev": "n8n-node dev",
         "lint": "n8n-node lint",

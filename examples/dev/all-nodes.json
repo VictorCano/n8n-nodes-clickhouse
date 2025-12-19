@@ -1,0 +1,208 @@
+{
+  "name": "ClickHouse - All Nodes (Dev)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "command",
+        "operation": "executeCommand",
+        "command": "CREATE TABLE IF NOT EXISTS events (id UInt64, event String, created_at DateTime) ENGINE = MergeTree() ORDER BY id",
+        "databaseOverride": "test",
+        "timeoutMs": 60000,
+        "compress": true
+      },
+      "id": "2",
+      "name": "Create Table",
+      "type": "CUSTOM.clickhouse",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "ClickHouseApi": {
+          "name": "ClickHouse Local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "id",
+              "value": 1
+            }
+          ],
+          "string": [
+            {
+              "name": "event",
+              "value": "signup"
+            },
+            {
+              "name": "created_at",
+              "value": "2025-01-01 00:00:00"
+            }
+          ]
+        }
+      },
+      "id": "3",
+      "name": "Set",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "insert",
+        "operation": "insertFromItems",
+        "databaseOverride": "test",
+        "table": "events",
+        "columnsCsv": "id,event,created_at",
+        "batchSize": 1000,
+        "ignoreUnknownFields": false,
+        "gzipRequest": false,
+        "timeoutMs": 60000,
+        "compress": true
+      },
+      "id": "4",
+      "name": "Insert Row",
+      "type": "CUSTOM.clickhouse",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "ClickHouseApi": {
+          "name": "ClickHouse Local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "query",
+        "operation": "executeQuery",
+        "query": "SELECT * FROM events ORDER BY id DESC",
+        "limit": 100,
+        "paginate": false,
+        "outputMode": "single",
+        "databaseOverride": "test",
+        "timeoutMs": 60000,
+        "compress": true
+      },
+      "id": "5",
+      "name": "Query",
+      "type": "CUSTOM.clickhouse",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ],
+      "credentials": {
+        "ClickHouseApi": {
+          "name": "ClickHouse Local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "metadata",
+        "operation": "listTables",
+        "databaseOverride": "test",
+        "metadataDatabase": "",
+        "timeoutMs": 60000,
+        "compress": true
+      },
+      "id": "6",
+      "name": "List Tables",
+      "type": "CUSTOM.clickhouse",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        300
+      ],
+      "credentials": {
+        "ClickHouseApi": {
+          "name": "ClickHouse Local"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Table": {
+      "main": [
+        [
+          {
+            "node": "Set",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set": {
+      "main": [
+        [
+          {
+            "node": "Insert Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Row": {
+      "main": [
+        [
+          {
+            "node": "Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query": {
+      "main": [
+        [
+          {
+            "node": "List Tables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "00000000-0000-0000-0000-000000000000",
+  "meta": {
+    "instanceId": "local"
+  }
+}
