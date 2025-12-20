@@ -136,15 +136,20 @@ jobs:
           RELEASE_TYPE: ${{ needs.plan-release.outputs.bump }}
         run: |
           set -euo pipefail
-          NEXT_VERSION="$(npm version "${RELEASE_TYPE}" --no-git-tag-version)"
-          NEXT_VERSION="${NEXT_VERSION#v}"
-          npx auto-changelog -p
+          CURRENT_VERSION="$(node -p "require('./package.json').version")"
+          NEXT_VERSION="$(node -e "const [maj,min,pat]=process.argv[1].split('.').map(Number); const bump=process.argv[2]; let v; if(bump==='major'){v=[maj+1,0,0];} else if(bump==='minor'){v=[maj,min+1,0];} else {v=[maj,min,pat+1];} console.log(v.join('.'));" "${CURRENT_VERSION}" "${RELEASE_TYPE}")"
           git fetch origin "refs/heads/release/*:refs/remotes/origin/release/*" || true
           if git show-ref --quiet "refs/remotes/origin/release/v${NEXT_VERSION}"; then
             git checkout -B "release/v${NEXT_VERSION}" "origin/release/v${NEXT_VERSION}"
           else
             git checkout -b "release/v${NEXT_VERSION}"
           fi
+          git reset --hard
+          CURRENT_VERSION="$(node -p "require('./package.json').version")"
+          if [ "${CURRENT_VERSION}" != "${NEXT_VERSION}" ]; then
+            npm version "${NEXT_VERSION}" --no-git-tag-version
+          fi
+          npx auto-changelog -p
           git add package.json package-lock.json CHANGELOG.md
           if git diff --cached --quiet; then
             echo "No release changes to commit."
