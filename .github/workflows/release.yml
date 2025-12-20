@@ -217,7 +217,7 @@ jobs:
             echo "${PACKAGE_NAME}@${VERSION} already published."
             exit 0
           fi
-          npm publish
+          npm publish --ignore-scripts
 
       - name: Tag and release
         env:
