@@ -178,7 +178,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT_RELEASE }}
         run: |
           set -euo pipefail
-          gh pr checks "${{ steps.pr.outputs.pr_url }}" --watch --interval 10
+          PR_URL="${{ steps.pr.outputs.pr_url }}"
+          if OUTPUT=$(gh pr checks "${PR_URL}" --watch --interval 10 2>&1); then
+            echo "${OUTPUT}"
+            exit 0
+          fi
+          if echo "${OUTPUT}" | grep -qi "no checks reported"; then
+            echo "No checks reported for ${PR_URL}. Continuing without waiting."
+            exit 0
+          fi
+          echo "${OUTPUT}" >&2
+          exit 1
 
       - name: Merge release PR
         env:
