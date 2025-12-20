@@ -166,19 +166,26 @@ jobs:
       - name: Open release PR
         id: pr
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT_RELEASE || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           NEXT_VERSION="$(node -p "require('./package.json').version")"
           PR_URL=$(gh pr create --title "chore(release): v${NEXT_VERSION}" --body "Automated release PR for v${NEXT_VERSION}." --base main --head "release/v${NEXT_VERSION}" --label "release" || gh pr view "release/v${NEXT_VERSION}" --json url -q .url)
           echo "pr_url=${PR_URL}" >> "$GITHUB_OUTPUT"
 
-      - name: Enable auto-merge
+      - name: Wait for release PR checks
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT_RELEASE }}
         run: |
           set -euo pipefail
-          gh pr merge --auto --merge "${{ steps.pr.outputs.pr_url }}"
+          gh pr checks "${{ steps.pr.outputs.pr_url }}" --watch --interval 10
+
+      - name: Merge release PR
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT_RELEASE }}
+        run: |
+          set -euo pipefail
+          gh pr merge --merge --delete-branch "${{ steps.pr.outputs.pr_url }}"
 
   publish-release:
     needs: plan-release

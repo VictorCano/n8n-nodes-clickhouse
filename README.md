@@ -149,9 +149,12 @@ Releases are fully automated on merge to `main`. The workflow determines the ver
 Required repository secrets:
 
 - `NPM_TOKEN` (npm publish)
+- `GH_PAT_RELEASE` (merge release PRs so publish workflow triggers)
 
 The npm token user must be a maintainer for the package name (`@victorcano/n8n-nodes-clickhouse`). If the name is already owned on npm, add the user as a collaborator or rename the package before releasing.
 
 Because this is a scoped package, the token must have access to the `@victorcano` scope and the package publishes as public (`publishConfig.access=public`).
+
+The `GH_PAT_RELEASE` token must have Actions + Contents + Pull requests write permissions on this repo so the release PR merge triggers the publish workflow.
 
 The workflow uses `npm run release` (n8n-node release) and creates tags + GitHub releases.
